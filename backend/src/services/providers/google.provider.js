@@ -2,7 +2,6 @@ import { google } from "googleapis";
 
 export const fetchGoogleFiles = async (account, pageToken = null) => {
   try {
-    console.log("⏳ Google fetch start");
 
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -24,8 +23,6 @@ export const fetchGoogleFiles = async (account, pageToken = null) => {
         "nextPageToken, files(id,name,mimeType,size,thumbnailLink,webViewLink,createdTime)",
     });
 
-    console.log("✅ Google fetch success");
-
     return {
       files: res.data.files || [],
       nextPageToken: res.data.nextPageToken || null,
@@ -40,7 +37,6 @@ export const fetchGoogleFiles = async (account, pageToken = null) => {
 
 export const fetchGoogleStorage = async (account) => {
   try {
-    console.log("📦 Fetching Google storage for:", account.email);
 
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,

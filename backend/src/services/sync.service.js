@@ -3,7 +3,6 @@ import CloudAccount from "../models/CloudAccount.js";
 import { fetchGoogleStorage } from "./providers/google.provider.js";
 
 cron.schedule("*/20 * * * *", async () => {
-  console.log("🔄 Background sync started");
 
   const accounts = await CloudAccount.find();
 
@@ -24,8 +23,6 @@ cron.schedule("*/20 * * * *", async () => {
         acc.lastSyncedAt = new Date();
 
         await acc.save();
-
-        console.log("✅ Synced:", acc.email);
       }
     } catch (err) {
       console.error("❌ Sync failed for:", acc.email || acc._id, err.message);

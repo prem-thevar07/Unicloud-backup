@@ -89,14 +89,4 @@ userSchema.methods.isOtpValid = function (otp) {
   );
 };
 
-/* ===============================
-   🔥 DEBUG LOG (optional)
-=============================== */
-userSchema.post("save", function (doc) {
-  console.log("👤 User saved:", {
-    id: doc._id,
-    email: doc.email,
-  });
-});
-
 export default mongoose.model("User", userSchema);

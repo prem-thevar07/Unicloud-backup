@@ -74,15 +74,4 @@ cloudAccountSchema.index(
   { unique: true }
 );
 
-/* ===============================
-   🔥 DEBUG HOOK (OPTIONAL BUT GREAT)
-=============================== */
-cloudAccountSchema.post("save", function (doc) {
-  console.log("💾 CloudAccount saved:", {
-    userId: doc.userId,
-    provider: doc.provider,
-    email: doc.email,
-  });
-});
-
 export default mongoose.model("CloudAccount", cloudAccountSchema);

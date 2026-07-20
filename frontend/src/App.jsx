@@ -15,6 +15,7 @@ const ManageAccounts = lazy(() => import("./pages/ManageAccounts"));
 const Photos = lazy(() => import("./pages/Photos"));
 const Upload = lazy(() => import("./pages/Upload"));
 const Optimize = lazy(() => import("./pages/Optimize"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 
 function App() {
   return (
@@ -51,6 +52,7 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/verify-otp" element={<OtpVerify />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/auth/success" element={<AuthSuccess />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/oauth-success" element={<OAuthSuccess />} />

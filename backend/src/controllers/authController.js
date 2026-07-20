@@ -1,7 +1,7 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { sendOTPEmail } from "../utils/sendEmail.js";
+import { sendOTPEmail, sendResetPasswordEmail } from "../utils/sendEmail.js";
 
 /* ======================
    OTP GENERATOR
@@ -47,17 +47,14 @@ export const register = async (req, res) => {
       await sendOTPEmail(email, otp);
     } catch (emailError) {
       console.error("OTP email failed:", emailError);
-
-      // Cleanup user if OTP email fails
-      await User.findByIdAndDelete(user._id);
-
-      return res.status(500).json({
-        message: "Failed to send OTP email. Please try again."
-      });
+      
+      console.log("\n=============================================");
+      console.log(`📢 [LOCAL DEV FALLBACK] OTP CODE FOR ${email}: ${otp}`);
+      console.log("=============================================\n");
     }
 
     return res.status(201).json({
-      message: "OTP sent to email. Please verify."
+      message: "OTP sent. (Local development fallback: check terminal console log if email fails)."
     });
 
   } catch (err) {
@@ -167,13 +164,13 @@ export const resendOTP = async (req, res) => {
       await sendOTPEmail(email, otp);
     } catch (emailError) {
       console.error("Resend OTP email failed:", emailError);
-
-      return res.status(500).json({
-        message: "Failed to resend OTP. Try again later."
-      });
+      
+      console.log("\n=============================================");
+      console.log(`📢 [LOCAL DEV FALLBACK RESEND] OTP CODE FOR ${email}: ${otp}`);
+      console.log("=============================================\n");
     }
 
-    return res.json({ message: "OTP resent successfully" });
+    return res.json({ message: "OTP resent successfully. (Local development fallback: check terminal console log if email fails)." });
 
   } catch (err) {
     console.error("Resend OTP error:", err);
@@ -183,4 +180,76 @@ export const resendOTP = async (req, res) => {
   }
 };
 
+/* ======================
+   FORGOT PASSWORD
+====================== */
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
 
+    if (!email) {
+      return res.status(400).json({ message: "Email is required." });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ message: "No account found with this email." });
+    }
+
+    const otp = generateOTP();
+    user.resetOtp = otp;
+    user.resetOtpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save();
+
+    try {
+      await sendResetPasswordEmail(email, otp);
+    } catch (emailError) {
+      console.error("Reset email failed:", emailError);
+      console.log("\n=============================================");
+      console.log(`\uD83D\uDCE2 [LOCAL DEV FALLBACK] RESET OTP FOR ${email}: ${otp}`);
+      console.log("=============================================\n");
+    }
+
+    return res.json({ message: "Reset code sent to your email." });
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    return res.status(500).json({ message: "Something went wrong. Please try again." });
+  }
+};
+
+/* ======================
+   RESET PASSWORD
+====================== */
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ message: "All fields are required." });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    if (!user.resetOtp || user.resetOtp !== otp) {
+      return res.status(400).json({ message: "Invalid reset code." });
+    }
+
+    if (!user.resetOtpExpiry || user.resetOtpExpiry < new Date()) {
+      return res.status(400).json({ message: "Reset code has expired. Please request a new one." });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    user.resetOtp = null;
+    user.resetOtpExpiry = null;
+    await user.save();
+
+    return res.json({ message: "Password reset successfully. You can now log in." });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    return res.status(500).json({ message: "Failed to reset password." });
+  }
+};

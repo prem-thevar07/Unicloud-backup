@@ -134,14 +134,48 @@ router.get("/download/:id", auth, async (req, res) => {
       },
     });
 
-    const command = new GetObjectCommand({
+    const ext = fileId.split(".").pop().toLowerCase();
+    const mimeMap = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+      pdf: "application/pdf",
+      txt: "text/plain",
+      mp3: "audio/mpeg",
+      mp4: "video/mp4",
+      html: "text/html"
+    };
+    const contentType = mimeMap[ext] || "application/octet-stream";
+
+    const isAjax = req.headers.authorization;
+    const commandParams = {
       Bucket: bucket,
       Key: fileId,
-    });
+    };
+
+    if (isAjax) {
+      // Force download for AJAX request (download button)
+      commandParams.ResponseContentDisposition = `attachment; filename="${fileId.split("/").pop()}"`;
+    } else {
+      // Inline rendering inside browser tab (open button)
+      commandParams.ResponseContentDisposition = "inline";
+      commandParams.ResponseContentType = contentType;
+    }
+
+    const command = new GetObjectCommand(commandParams);
 
     const signedUrl = await getSignedUrl(client, command, { expiresIn: 3600 });
 
-    res.redirect(signedUrl);
+    // Return secure URL in JSON if requested via Axios (for download button), 
+    // otherwise redirect directly for direct browser tab opens (for open button)
+    if (req.headers.authorization) {
+      res.json({ link: signedUrl });
+    } else {
+      res.redirect(signedUrl);
+    }
   } catch (err) {
     console.error("❌ S3 download link error:", err.message);
     res.status(500).json({ message: "Failed to retrieve S3 link" });

@@ -6,6 +6,8 @@ import {
   updateProfileName,
   changePassword,
   uploadProfilePicture,
+  requestAccountDeletion,
+  confirmAccountDeletion,
 } from "../controllers/profile.controller.js";
 import auth from "../middleware/auth.middleware.js";
 
@@ -38,5 +40,9 @@ router.get("/summary", auth, getProfileSummary);
 router.put("/update-name", auth, updateProfileName);
 router.put("/change-password", auth, changePassword);
 router.post("/upload-picture", auth, upload.single("avatar"), uploadProfilePicture);
+
+// Account deletion endpoints
+router.post("/request-delete", auth, requestAccountDeletion);
+router.post("/confirm-delete", auth, confirmAccountDeletion);
 
 export default router;

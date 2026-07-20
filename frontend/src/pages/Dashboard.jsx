@@ -180,34 +180,34 @@ const Dashboard = () => {
   
   const totalUsedStorage = hasAccounts 
     ? accounts.reduce((sum, curr) => sum + (curr.storage?.used || 0), 0)
-    : 34.7 * 1024 * 1024 * 1024; // mockup fallback
+    : 0;
     
   const totalLimitStorage = hasAccounts
-    ? accounts.reduce((sum, curr) => sum + (curr.storage?.total || 0), 0) || 15 * 1024 * 1024 * 1024
-    : 140 * 1024 * 1024 * 1024; // mockup fallback
+    ? accounts.reduce((sum, curr) => sum + (curr.storage?.total || 0), 0) || 0
+    : 0;
     
   const pct = totalLimitStorage ? (totalUsedStorage / totalLimitStorage) * 100 : 0;
   const usedPercentage = pct > 0 && pct < 1 ? Number(pct.toFixed(2)) : Math.round(pct);
 
-  const totalFilesCount = hasAccounts ? recentFiles.length * 15 + 120 : 12456;
+  const totalFilesCount = hasAccounts ? recentFiles.length * 15 + 120 : 0;
   const totalPhotosCount = hasAccounts 
     ? recentFiles.filter(f => f.type === "image" || f.type === "video").length * 8 + 30 
-    : 8245;
+    : 0;
 
   // Provider-specific storage metrics
   const googleAccount = accounts.find(acc => acc.provider === "google");
-  const googleUsed = googleAccount ? (googleAccount.storage?.used || 0) : (hasAccounts ? 0 : 15.6 * 1024 * 1024 * 1024);
-  const googleTotal = googleAccount ? (googleAccount.storage?.total || 15 * 1024 * 1024 * 1024) : (hasAccounts ? 0 : 100 * 1024 * 1024 * 1024);
+  const googleUsed = googleAccount ? (googleAccount.storage?.used || 0) : 0;
+  const googleTotal = googleAccount ? (googleAccount.storage?.total || 15 * 1024 * 1024 * 1024) : 0;
   const googlePercentage = googleTotal ? Math.round((googleUsed / googleTotal) * 100) : 0;
 
   const dropboxAccount = accounts.find(acc => acc.provider === "dropbox");
-  const dropboxUsed = dropboxAccount ? (dropboxAccount.storage?.used || 0) : (hasAccounts ? 0 : 3.1 * 1024 * 1024 * 1024);
-  const dropboxTotal = dropboxAccount ? (dropboxAccount.storage?.total || 2 * 1024 * 1024 * 1024) : (hasAccounts ? 0 : 10 * 1024 * 1024 * 1024);
+  const dropboxUsed = dropboxAccount ? (dropboxAccount.storage?.used || 0) : 0;
+  const dropboxTotal = dropboxAccount ? (dropboxAccount.storage?.total || 2 * 1024 * 1024 * 1024) : 0;
   const dropboxPercentage = dropboxTotal ? Math.round((dropboxUsed / dropboxTotal) * 100) : 0;
 
   const onedriveAccount = accounts.find(acc => acc.provider === "onedrive");
-  const onedriveUsed = onedriveAccount ? (onedriveAccount.storage?.used || 0) : (hasAccounts ? 0 : 7.8 * 1024 * 1024 * 1024);
-  const onedriveTotal = onedriveAccount ? (onedriveAccount.storage?.total || 5 * 1024 * 1024 * 1024) : (hasAccounts ? 0 : 15 * 1024 * 1024 * 1024);
+  const onedriveUsed = onedriveAccount ? (onedriveAccount.storage?.used || 0) : 0;
+  const onedriveTotal = onedriveAccount ? (onedriveAccount.storage?.total || 5 * 1024 * 1024 * 1024) : 0;
   const onedrivePercentage = onedriveTotal ? Math.round((onedriveUsed / onedriveTotal) * 100) : 0;
 
   // SVG Circular chart parameters
@@ -373,11 +373,8 @@ const Dashboard = () => {
                 <span className="metric-icon">💾</span>
                 <span className="metric-label">Total Storage Used</span>
               </div>
-              <h2 className="metric-value">{formatSize(totalUsedStorage || 34.7 * 1024 * 1024 * 1024)}</h2>
+              <h2 className="metric-value">{formatSize(totalUsedStorage)}</h2>
               <span className="metric-limit">of {formatSize(totalLimitStorage)} used</span>
-              <div className="metric-pill positive">
-                <span>+2.4 GB</span> <span className="pill-desc">vs last 7 days</span>
-              </div>
             </div>
           </div>
 
@@ -412,9 +409,6 @@ const Dashboard = () => {
               </div>
               <h2 className="metric-value">{accounts.length}</h2>
               <span className="metric-limit">Active accounts</span>
-              <div className="metric-pill positive">
-                <span>+1</span> <span className="pill-desc">vs last 7 days</span>
-              </div>
             </div>
             <div className="metric-card-decoration">
               <div className="decor-clouds-container">
@@ -542,7 +536,7 @@ const Dashboard = () => {
                   <div className="progress-bar-fill total" style={{ width: `${usedPercentage}%` }} />
                 </div>
                 <span className="provider-sizes">
-                  <strong>{formatSize(totalUsedStorage || 34.7 * 1024 * 1024 * 1024)}</strong> <span className="muted-size">of {formatSize(totalLimitStorage)}</span>
+                  <strong>{formatSize(totalUsedStorage)}</strong> <span className="muted-size">of {formatSize(totalLimitStorage)}</span>
                 </span>
                 <span className="provider-percent total-text">{usedPercentage}%</span>
                 <span className="row-chevron">❯</span>

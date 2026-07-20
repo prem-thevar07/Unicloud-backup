@@ -568,51 +568,51 @@ const Files = () => {
     
     setExpandedAccountId(accountId);
     
-    const fetchFoldersBackground = async () => {
-      try {
-        const res = await api.get(`/files/folders?accountId=${accountId}`);
-        let accountFolders = res.data || [];
-        
-        if (accountFolders.length === 0) {
-          const seen = new Set();
-          files.forEach(f => {
-            if (String(f.accountId) === String(accountId)) {
-              const path = getFileVirtualPath(f);
-              const folderName = path.startsWith("/") ? path.slice(1) : path;
-              if (folderName && !seen.has(folderName)) {
-                seen.add(folderName);
-                accountFolders.push({
-                  id: folderName,
-                  name: folderName,
-                  path: path,
-                  provider: f.provider,
-                  accountId: f.accountId,
-                  accountEmail: f.accountEmail || (f.provider === "google" ? "Google Drive" : f.provider === "dropbox" ? "Dropbox" : "OneDrive"),
-                  isVirtual: true
-                });
-              }
-            }
-          });
-        }
-        
-        setFoldersByAccount(prev => {
-          const updated = { ...prev, [accountId]: accountFolders };
-          try {
-            localStorage.setItem("unicloud_cached_folders", JSON.stringify(updated));
-          } catch (_) {}
-          return updated;
-        });
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setFoldersLoading(false);
-      }
-    };
-
     if (!foldersByAccount[accountId]) {
       setFoldersLoading(true);
+      loadFoldersForAccount(accountId);
     }
-    fetchFoldersBackground();
+  };
+
+  const loadFoldersForAccount = async (accountId) => {
+    try {
+      const res = await api.get(`/files/folders?accountId=${accountId}`);
+      let accountFolders = res.data || [];
+      
+      if (accountFolders.length === 0) {
+        const seen = new Set();
+        files.forEach(f => {
+          if (String(f.accountId) === String(accountId)) {
+            const path = getFileVirtualPath(f);
+            const folderName = path.startsWith("/") ? path.slice(1) : path;
+            if (folderName && !seen.has(folderName)) {
+              seen.add(folderName);
+              accountFolders.push({
+                id: folderName,
+                name: folderName,
+                path: path,
+                provider: f.provider,
+                accountId: f.accountId,
+                accountEmail: f.accountEmail || (f.provider === "google" ? "Google Drive" : f.provider === "dropbox" ? "Dropbox" : "OneDrive"),
+                isVirtual: true
+              });
+            }
+          }
+        });
+      }
+      
+      setFoldersByAccount(prev => {
+        const updated = { ...prev, [accountId]: accountFolders };
+        try {
+          localStorage.setItem("unicloud_cached_folders", JSON.stringify(updated));
+        } catch (_) {}
+        return updated;
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setFoldersLoading(false);
+    }
   };
 
 
@@ -680,7 +680,15 @@ const Files = () => {
         if (res.data?.link) {
           triggerDownload(res.data.link);
           logActivity(`Downloaded file <strong>${file.name}</strong> from Dropbox`, "📥", "green");
-              } else if (file.provider === "onedrive") {
+        } else {
+          alert("Failed to generate download link");
+        }
+      } else if (file.provider === "google") {
+        const token = localStorage.getItem("token");
+        const downloadUrl = `${getCleanApiUrl(`/api/google/download/${file.accountId}?fileId=${file.id}`)}&token=${encodeURIComponent(token)}`;
+        triggerDownload(downloadUrl);
+        logActivity(`Downloaded file <strong>${file.name}</strong> from Google Drive`, "📥", "green");
+      } else if (file.provider === "onedrive") {
         const res = await api.get(`/onedrive/download/${file.accountId}?fileId=${file.id}`);
         if (res.data?.link) {
           triggerDownload(res.data.link);
@@ -704,14 +712,13 @@ const Files = () => {
         } else {
           alert("Failed to generate download link");
         }
+      } else {
+        const dlink = file.webContentLink || file.url;
+        if (dlink) {
+          triggerDownload(dlink);
+          logActivity(`Downloaded file <strong>${file.name}</strong> from Cloud Storage`, "📥", "green");
         } else {
-          const dlink = file.webContentLink || file.url;
-          if (dlink) {
-            triggerDownload(dlink);
-            logActivity(`Downloaded file <strong>${file.name}</strong> from Google Drive`, "📥", "green");
-          } else {
-            alert("Download link not available");
-          }
+          alert("Download link not available");
         }
       }
     } catch (err) {
@@ -732,17 +739,34 @@ const Files = () => {
               triggerDownload(res.data.link);
               logActivity(`Downloaded file <strong>${f.name}</strong> from Dropbox`, "📥", "green");
             }
+          } else if (f.provider === "google") {
+            const token = localStorage.getItem("token");
+            const downloadUrl = `${getCleanApiUrl(`/api/google/download/${f.accountId}?fileId=${f.id}`)}&token=${encodeURIComponent(token)}`;
+            triggerDownload(downloadUrl);
+            logActivity(`Downloaded file <strong>${f.name}</strong> from Google Drive`, "📥", "green");
           } else if (f.provider === "onedrive") {
             const res = await api.get(`/onedrive/download/${f.accountId}?fileId=${f.id}`);
             if (res.data?.link) {
               triggerDownload(res.data.link);
               logActivity(`Downloaded file <strong>${f.name}</strong> from OneDrive`, "📥", "green");
             }
+          } else if (f.provider === "s3") {
+            const res = await api.get(`/s3/download/${f.accountId}?fileId=${f.id}`);
+            if (res.data?.link) {
+              triggerDownload(res.data.link);
+              logActivity(`Downloaded file <strong>${f.name}</strong> from Amazon S3`, "📥", "green");
+            }
+          } else if (f.provider === "box") {
+            const res = await api.get(`/box/download/${f.accountId}?fileId=${f.id}`);
+            if (res.data?.link) {
+              triggerDownload(res.data.link);
+              logActivity(`Downloaded file <strong>${f.name}</strong> from Box`, "📥", "green");
+            }
           } else {
             const dlink = f.webContentLink || f.url;
             if (dlink) {
               triggerDownload(dlink);
-              logActivity(`Downloaded file <strong>${f.name}</strong> from Google Drive`, "📥", "green");
+              logActivity(`Downloaded file <strong>${f.name}</strong> from Cloud Storage`, "📥", "green");
             }
           }
         } catch (err) {
@@ -833,27 +857,30 @@ const Files = () => {
     const pathMap = { "/": root };
 
     const sortedFolders = [...folders].sort((a, b) => {
-      const slashesA = (a.path.match(/\//g) || []).length;
-      const slashesB = (b.path.match(/\//g) || []).length;
+      const pathA = a.path || "";
+      const pathB = b.path || "";
+      const slashesA = (pathA.match(/\//g) || []).length;
+      const slashesB = (pathB.match(/\//g) || []).length;
       return slashesA - slashesB;
     });
 
     sortedFolders.forEach(folder => {
+      const fPath = folder.path || ("/" + folder.name);
       const node = {
         id: folder.id,
         name: folder.name,
         type: "folder",
-        path: folder.path,
+        path: fPath,
         accountId: folder.accountId,
         provider: folder.provider,
         children: []
       };
-      pathMap[folder.path] = node;
+      pathMap[fPath] = node;
 
-      const lastSlashIndex = folder.path.lastIndexOf("/");
+      const lastSlashIndex = fPath.lastIndexOf("/");
       let parentPath = "/";
       if (lastSlashIndex > 0) {
-        parentPath = folder.path.substring(0, lastSlashIndex);
+        parentPath = fPath.substring(0, lastSlashIndex);
       }
 
       const parentNode = pathMap[parentPath] || root;
@@ -862,19 +889,19 @@ const Files = () => {
 
     files.forEach(file => {
       if (String(file.accountId) !== String(account._id)) return;
+      const filePath = file.path || getFileVirtualPath(file) || "/";
       const node = {
         id: file.id,
         name: file.name,
         type: "file",
-        path: file.path,
+        path: filePath,
         size: file.size,
         createdAt: file.createdAt,
         provider: file.provider,
         accountId: file.accountId,
         fileObj: file
       };
-      const parentPath = file.path || "/";
-      const parentNode = pathMap[parentPath] || root;
+      const parentNode = pathMap[filePath] || root;
       parentNode.children.push(node);
     });
 
@@ -944,6 +971,9 @@ const Files = () => {
                 onMouseEnter={(e) => {
                   cancelHoverLeave();
                   const top = getRelativeTop(e.currentTarget);
+                  if (!foldersByAccount[acc._id]) {
+                    loadFoldersForAccount(acc._id);
+                  }
                   const children = getAccountTree(acc);
                   setFlyoutTops([top]);
                   setHoveredPath([{ level: 0, id: acc._id, name: acc.email, type: "account", children }]);

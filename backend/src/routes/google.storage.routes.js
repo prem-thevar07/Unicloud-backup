@@ -317,4 +317,69 @@ router.get("/folders/:accountId", auth, async (req, res) => {
   }
 });
 
+/* ===============================
+   📥 GOOGLE SECURE DOWNLOAD PROXY
+=============================== */
+router.get("/download/:accountId", auth, async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const { fileId } = req.query;
+
+    if (!fileId) {
+      return res.status(400).json({ message: "File ID is required" });
+    }
+
+    const account = await CloudAccount.findOne({
+      _id: accountId,
+      userId: req.user.id,
+      provider: "google",
+    });
+
+    if (!account) {
+      return res.status(404).json({ message: "Account not found" });
+    }
+
+    const client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    client.setCredentials({
+      access_token: account.accessToken,
+      refresh_token: account.refreshToken,
+    });
+
+    const drive = google.drive({
+      version: "v3",
+      auth: client,
+    });
+
+    // 1. Retrieve file metadata to get name and size
+    const fileMetadata = await drive.files.get({
+      fileId,
+      fields: "name, size, mimeType",
+    });
+
+    const { name, size, mimeType } = fileMetadata.data;
+
+    // 2. Fetch the file data stream
+    const driveResponse = await drive.files.get(
+      { fileId, alt: "media" },
+      { responseType: "stream" }
+    );
+
+    // 3. Set standard stream headers
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(name)}"`);
+    res.setHeader("Content-Type", mimeType || "application/octet-stream");
+    if (size) {
+      res.setHeader("Content-Length", size);
+    }
+
+    // Pipe the response stream
+    driveResponse.data.pipe(res);
+  } catch (err) {
+    console.error("❌ Google download proxy error:", err.message);
+    res.status(500).json({ message: "Failed to download Google Drive file: " + err.message });
+  }
+});
+
 export default router;

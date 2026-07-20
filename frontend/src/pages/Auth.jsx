@@ -245,7 +245,7 @@ const Auth = () => {
 
             {isLogin && (
               <div className="forgot-password">
-                <a href="#forgot" onClick={(e) => { e.preventDefault(); alert("Forgot password flow coming soon!"); }}>
+                <a href="/forgot-password" onClick={(e) => { e.preventDefault(); navigate("/forgot-password"); }}>
                   Forgot password?
                 </a>
               </div>

@@ -156,6 +156,22 @@
   color: #6a7185;
 }
 
+/* AUTOFILL OVERRIDES */
+.auth-input:-webkit-autofill,
+.auth-input:-webkit-autofill:hover, 
+.auth-input:-webkit-autofill:focus, 
+.auth-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0e121f inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.auth-input:-webkit-autofill:focus {
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.1), 0 0 0 1000px #0e121f inset !important;
+}
+
 /* FORGOT PASSWORD */
 .forgot-password {
   text-align: right;

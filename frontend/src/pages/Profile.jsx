@@ -32,6 +32,90 @@ const Profile = () => {
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
+  // Account Deletion States
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteStep, setDeleteStep] = useState(1); // 1 = request/warning, 2 = enter otp
+  const [deleteOtp, setDeleteOtp] = useState(["", "", "", "", "", ""]);
+  const [deleteCooldown, setDeleteCooldown] = useState(0);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const deleteOtpRefs = useRef([]);
+
+  useEffect(() => {
+    if (deleteCooldown <= 0) return;
+    const timer = setTimeout(() => setDeleteCooldown(deleteCooldown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [deleteCooldown]);
+
+  const handleRequestDeleteOtp = async () => {
+    setDeleteError("");
+    setDeleteLoading(true);
+    try {
+      await API.post("/profile/request-delete");
+      setDeleteCooldown(60);
+      setDeleteStep(2);
+      setDeleteOtp(["", "", "", "", "", ""]);
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || "Failed to request deletion code.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeleteError("");
+    const otpString = deleteOtp.join("");
+    if (otpString.length !== 6) {
+      setDeleteError("Please enter the full 6-digit code.");
+      return;
+    }
+    setDeleteLoading(true);
+    try {
+      await API.post("/profile/confirm-delete", { otp: otpString });
+      localStorage.clear();
+      showToast("success", "Account deleted successfully.");
+      setTimeout(() => {
+        navigate("/auth");
+        window.location.reload();
+      }, 1500);
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || "Failed to delete account. Please check the code.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleDeleteOtpChange = (index, value) => {
+    if (value.length > 1) return;
+    const newOtp = [...deleteOtp];
+    newOtp[index] = value;
+    setDeleteOtp(newOtp);
+    setDeleteError("");
+
+    if (value && index < 5) {
+      deleteOtpRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleDeleteOtpKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !deleteOtp[index] && index > 0) {
+      deleteOtpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleDeleteOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").trim().slice(0, 6);
+    if (/^\d+$/.test(pasted)) {
+      const chars = pasted.split("");
+      const newOtp = [...deleteOtp];
+      chars.forEach((c, i) => { newOtp[i] = c; });
+      setDeleteOtp(newOtp);
+      const focusIdx = Math.min(chars.length, 5);
+      deleteOtpRefs.current[focusIdx]?.focus();
+    }
+  };
+
   const showToast = (type, message) => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
@@ -459,6 +543,25 @@ const Profile = () => {
                 </div>
               )}
             </div>
+
+            {/* DANGER ZONE (ACCOUNT DELETION) */}
+            <div className="profile-glass-card profile-danger-zone" style={{ position: "relative" }}>
+              <h3 className="profile-danger-title">⚠️ Danger Zone</h3>
+              <p className="profile-danger-desc">
+                Permanently delete your Unicloud account and remove all connected cloud services, synced storage limits, and activity logs.
+              </p>
+              <button 
+                className="profile-danger-btn"
+                onClick={() => {
+                  setShowDeleteModal(true);
+                  setDeleteStep(1);
+                  setDeleteError("");
+                  setDeleteOtp(["", "", "", "", "", ""]);
+                }}
+              >
+                Delete Account Permanent
+              </button>
+            </div>
           </div>
 
           {/* RIGHT COLUMN: Password & Connections */}
@@ -563,7 +666,17 @@ const Profile = () => {
                     className="profile-eye-toggle"
                     onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                   >
-                    {showCurrentPassword ? "👁️‍🗨️" : "👁️"}
+                    {showCurrentPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    )}
                   </button>
                 </div>
               </div>
@@ -582,7 +695,17 @@ const Profile = () => {
                     className="profile-eye-toggle"
                     onClick={() => setShowNewPassword(!showNewPassword)}
                   >
-                    {showNewPassword ? "👁️‍🗨️" : "👁️"}
+                    {showNewPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    )}
                   </button>
                 </div>
                 
@@ -610,6 +733,105 @@ const Profile = () => {
           </div>
         </div>
       </div>
+
+      {/* ACCOUNT DELETION OTP CONFIRMATION MODAL */}
+      {showDeleteModal && (
+        <div className="delete-otp-modal-overlay">
+          <div className="delete-otp-modal">
+            <div className="delete-otp-modal-header">
+              <h2>
+                {deleteStep === 1 ? "Permanently Delete Account?" : "Confirm Account Deletion"}
+              </h2>
+              <p>
+                {deleteStep === 1 
+                  ? "This action is permanent and cannot be undone. You will lose access to all synced services and configurations."
+                  : `Please enter the 6-digit confirmation code sent to ${user?.email}`
+                }
+              </p>
+            </div>
+
+            <div className="delete-otp-modal-warning">
+              ⚠️ <strong>Warning:</strong> All cloud tokens, synced storages, files tracking details, and history logs will be wiped permanently from Unicloud databases.
+            </div>
+
+            {deleteError && (
+              <div className="profile-toast error" style={{ position: "static", marginBottom: "16px", animation: "none", width: "100%", boxSizing: "border-box" }}>
+                <span>⚠️</span> {deleteError}
+              </div>
+            )}
+
+            {/* STEP 1: WARNING AND OTP REQUEST */}
+            {deleteStep === 1 && (
+              <div className="delete-modal-actions">
+                <button 
+                  className="delete-confirm-btn"
+                  onClick={handleRequestDeleteOtp}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? "Sending Code..." : "Send Verification OTP"}
+                </button>
+                <button 
+                  className="delete-cancel-btn"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleteLoading}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* STEP 2: ENTER OTP & CONFIRM DELETION */}
+            {deleteStep === 2 && (
+              <div>
+                <div className="delete-otp-input-container" onPaste={handleDeleteOtpPaste}>
+                  {deleteOtp.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={(el) => (deleteOtpRefs.current[i] = el)}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      className="delete-otp-digit"
+                      value={digit}
+                      onChange={(e) => handleDeleteOtpChange(i, e.target.value.replace(/\D/, ""))}
+                      onKeyDown={(e) => handleDeleteOtpKeyDown(i, e)}
+                      autoFocus={i === 0}
+                    />
+                  ))}
+                </div>
+
+                <div className="delete-modal-actions">
+                  <button 
+                    className="delete-confirm-btn"
+                    onClick={handleConfirmDelete}
+                    disabled={deleteLoading || deleteOtp.join("").length !== 6}
+                  >
+                    {deleteLoading ? "Permanently Deleting..." : "Permanently Delete"}
+                  </button>
+                  <button 
+                    className="delete-cancel-btn"
+                    onClick={() => setShowDeleteModal(false)}
+                    disabled={deleteLoading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+
+                <div className="delete-resend-container">
+                  <span>Didn't get the code?</span>
+                  <button
+                    className="delete-resend-btn"
+                    onClick={handleRequestDeleteOtp}
+                    disabled={deleteCooldown > 0 || deleteLoading}
+                  >
+                    {deleteCooldown > 0 ? `Resend in ${deleteCooldown}s` : "Resend Code"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 };

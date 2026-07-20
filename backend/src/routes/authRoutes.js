@@ -1,6 +1,6 @@
 import express from "express";
 import passport from "passport";
-import { register, verifyOTP, login, resendOTP } from "../controllers/authController.js";
+import { register, verifyOTP, login, resendOTP, forgotPassword, resetPassword } from "../controllers/authController.js";
 
 const router = express.Router();
 
@@ -8,6 +8,8 @@ router.post("/register", register);
 router.post("/verify-otp", verifyOTP);
 router.post("/login", login);
 router.post("/resend-otp", resendOTP);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 
 // Google Auth for Login
 router.get(

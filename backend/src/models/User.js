@@ -74,6 +74,32 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    /* ===============================
+       PASSWORD RESET
+    =============================== */
+    resetOtp: {
+      type: String,
+      default: null,
+    },
+
+    resetOtpExpiry: {
+      type: Date,
+      default: null,
+    },
+
+    /* ===============================
+       ACCOUNT DELETION
+    =============================== */
+    deleteOtp: {
+      type: String,
+      default: null,
+    },
+
+    deleteOtpExpiry: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

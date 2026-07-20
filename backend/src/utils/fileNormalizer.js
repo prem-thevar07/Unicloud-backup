@@ -64,7 +64,7 @@ export const normalizeFile = (
           : null,
 
       url: file.webViewLink || null,
-      webContentLink: file.webContentLink || null,
+      webContentLink: `/api/google/download/${accountId}?fileId=${file.id}`,
 
       createdAt: file.createdTime || null,
 
@@ -276,7 +276,7 @@ export const normalizeFile = (
       accountEmail,
       thumbnail: null,
       path: cleanPath,
-      url: `/api/box/download/${accountId}?fileId=${file.id}`,
+      url: file.shared_link?.url || `https://app.box.com/file/${file.id}`,
       webContentLink: `/api/box/download/${accountId}?fileId=${file.id}`,
       createdAt: file.modified_at || file.created_at || null,
       mimeType

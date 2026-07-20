@@ -177,9 +177,9 @@ router.get("/download/:id", auth, async (req, res) => {
       return res.status(404).json({ message: "Account not found" });
     }
 
-    // Redirect user browser to secure download stream
+    // Return secure download link in JSON for frontend iframe trigger
     const downloadUrl = `https://api.box.com/2.0/files/${fileId}/content?access_token=${account.accessToken}`;
-    res.redirect(downloadUrl);
+    res.json({ link: downloadUrl });
   } catch (err) {
     console.error("❌ Box download link error:", err.message);
     res.status(500).json({ message: "Failed to retrieve Box link" });

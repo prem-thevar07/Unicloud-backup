@@ -4,6 +4,7 @@ import { google } from "googleapis";
 import CloudAccount from "../models/CloudAccount.js";
 import auth from "../middleware/auth.middleware.js";
 import { oauth2Client } from "../config/google.js";
+import { fileCache } from "../utils/cache.js";
 
 const router = express.Router();
 
@@ -37,6 +38,8 @@ router.get("/connect", (req, res) => {
         "https://www.googleapis.com/auth/drive.readonly",
         "https://www.googleapis.com/auth/drive.file",
         "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/photoslibrary.readonly.originals",
+        "https://www.googleapis.com/auth/photoslibrary.appendonly",
       ],
       state: userId,
     });
@@ -72,7 +75,7 @@ router.get("/callback", async (req, res) => {
     const { tokens } = await client.getToken(code);
     client.setCredentials(tokens);
 
-    console.log("✅ Tokens received");
+    console.log("✅ Tokens received. Scopes returned by Google:", tokens.scope);
 
     /* GET EMAIL */
     const oauth2 = google.oauth2({
@@ -120,6 +123,12 @@ router.get("/callback", async (req, res) => {
     );
 
     console.log("💾 Account saved:", email);
+
+    // Invalidate caches for this account and user
+    if (existing) {
+      fileCache.invalidateAccount(existing._id.toString());
+    }
+    fileCache.invalidateUserPhotos(userId);
 
     res.redirect(`${process.env.FRONTEND_URL}/manage-accounts`);
   } catch (err) {
@@ -262,6 +271,49 @@ router.get("/storage", auth, async (req, res) => {
   } catch (err) {
     console.error("❌ STORAGE ERROR:", err.message);
     res.status(500).json({ message: "Storage failed" });
+  }
+});
+
+/* ===============================
+   📁 GET FOLDERS FOR AN ACCOUNT
+=============================== */
+router.get("/folders/:accountId", auth, async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const account = await CloudAccount.findOne({
+      _id: accountId,
+      userId: req.user.id,
+    });
+
+    if (!account) {
+      return res.status(404).json({ message: "Account not found" });
+    }
+
+    const client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    client.setCredentials({
+      access_token: account.accessToken,
+      refresh_token: account.refreshToken,
+    });
+
+    const drive = google.drive({
+      version: "v3",
+      auth: client,
+    });
+
+    // Query non-trashed folders
+    const response = await drive.files.list({
+      q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+      fields: "files(id, name)",
+      pageSize: 100,
+    });
+
+    res.json(response.data.files || []);
+  } catch (err) {
+    console.error("❌ List folders error:", err.message);
+    res.status(500).json({ message: "Failed to list folders" });
   }
 });
 

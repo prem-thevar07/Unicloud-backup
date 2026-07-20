@@ -11,6 +11,11 @@ import fileRoutes from "./routes/file.routes.js";
 import accountRoutes from "./routes/account.routes.js";
 import photoRoutes from "./routes/photo.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
+import dropboxRoutes from "./routes/dropbox.routes.js";
+import activityRoutes from "./routes/activity.routes.js";
+import onedriveRoutes from "./routes/onedrive.routes.js";
+import s3Routes from "./routes/s3.routes.js";
+import boxRoutes from "./routes/box.routes.js";
 
 import "./config/googleAuth.js";
 
@@ -62,6 +67,11 @@ app.use("/api/files", fileRoutes);
 app.use("/api/accounts", accountRoutes);
 app.use("/api/photos", photoRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/dropbox", dropboxRoutes);
+app.use("/api/activity", activityRoutes);
+app.use("/api/onedrive", onedriveRoutes);
+app.use("/api/s3", s3Routes);
+app.use("/api/box", boxRoutes);
 
 /* =======================
    HEALTH CHECK

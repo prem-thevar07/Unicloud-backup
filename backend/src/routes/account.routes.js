@@ -2,6 +2,7 @@ import express from "express";
 import auth from "../middleware/auth.middleware.js";
 import CloudAccount from "../models/CloudAccount.js";
 import { google } from "googleapis";
+import { logActivity } from "../utils/activityLogger.js";
 
 const router = express.Router();
 
@@ -71,6 +72,15 @@ router.post("/:id/sync", auth, async (req, res) => {
 
     await account.save();
 
+    // ✅ Log real sync event
+    const providerLabel = account.provider === "google" ? "Google Drive" : account.provider === "dropbox" ? "Dropbox" : account.provider === "s3" ? "Amazon S3" : "OneDrive";
+    await logActivity(
+      req.user.id,
+      "account_synced",
+      `Synced ${providerLabel} account`,
+      { provider: account.provider, email: account.email }
+    );
+
     console.log("✅ Sync success");
 
     res.json({ success: true });
@@ -85,6 +95,22 @@ router.post("/:id/sync", auth, async (req, res) => {
 =============================== */
 router.delete("/:id", auth, async (req, res) => {
   try {
+    const account = await CloudAccount.findOne({
+      _id: req.params.id,
+      userId: req.user.id,
+    });
+
+    if (account) {
+      // ✅ Log real disconnect event before deleting
+      const providerLabel = account.provider === "google" ? "Google Drive" : account.provider === "dropbox" ? "Dropbox" : account.provider === "s3" ? "Amazon S3" : "OneDrive";
+      await logActivity(
+        req.user.id,
+        "account_disconnected",
+        `Disconnected ${providerLabel} account (${account.email})`,
+        { provider: account.provider, email: account.email }
+      );
+    }
+
     await CloudAccount.deleteOne({
       _id: req.params.id,
       userId: req.user.id,

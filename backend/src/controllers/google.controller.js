@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import CloudAccount from "../models/CloudAccount.js";
 import { normalizeGoogleFile } from "../utils/fileNormalizer.js";
+import { logActivity } from "../utils/activityLogger.js";
 
 /* ===============================
    GOOGLE OAUTH CALLBACK
@@ -115,6 +116,24 @@ export const googleCallback = async (req, res) => {
     );
 
     console.log("💾 Account saved:", email);
+
+    // ✅ Log real account_connected event
+    const isNew = !await CloudAccount.findOne({ userId: state, provider: "google", email });
+    await logActivity(state, "account_connected",
+      `Connected Google Drive account (${email})`,
+      { provider: "google", email }
+    );
+
+    // ✅ Check and log storage warning (> 80%)
+    if (storage.total > 0) {
+      const pct = Math.round((storage.used / storage.total) * 100);
+      if (pct >= 80) {
+        await logActivity(state, "storage_warning",
+          `Google Drive (${email}) is at ${pct}% capacity`,
+          { provider: "google", email, storagePercent: pct }
+        );
+      }
+    }
 
     /* ===============================
        REDIRECT

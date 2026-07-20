@@ -1,6 +1,11 @@
 import CloudAccount from "../models/CloudAccount.js";
-import { fetchGoogleFiles } from "./providers/google.provider.js";
+import { fetchGoogleFiles, fetchGoogleFolders, deleteGoogleFile } from "./providers/google.provider.js";
+import { fetchDropboxFiles, fetchDropboxFolders, deleteDropboxFile } from "./providers/dropbox.provider.js";
+import { fetchOneDriveFiles, fetchOneDriveFolders, deleteOneDriveFile } from "./providers/onedrive.provider.js";
+import { fetchS3Files, fetchS3Folders, deleteS3File } from "./providers/s3.provider.js";
+import { fetchBoxFiles, fetchBoxFolders, deleteBoxFile } from "./providers/box.provider.js";
 import { normalizeFile } from "../utils/fileNormalizer.js";
+import { fileCache } from "../utils/cache.js";
 
 /* ===============================
    MAIN SERVICE
@@ -12,7 +17,13 @@ export const getAllFiles = async (userId, query = {}) => {
       type,
       search,
       mode = "all", // files | photos | all
-      pageTokens = "{}"
+      pageTokens = "{}",
+      startDate,
+      endDate,
+      folderId,
+      folderPath,
+      folderAccountId,
+      pageSize
     } = query;
 
     let parsedTokens = {};
@@ -29,11 +40,37 @@ export const getAllFiles = async (userId, query = {}) => {
     /* ===============================
        1️⃣ GET ACCOUNTS
     =============================== */
-    const accounts = await CloudAccount.find({ userId });
+    let accounts = await CloudAccount.find({ userId });
+    
+    if (query.accounts) {
+      const selectedIds = typeof query.accounts === "string"
+        ? query.accounts.split(",")
+        : query.accounts;
+      accounts = accounts.filter(acc => selectedIds.includes(String(acc._id)));
+    }
+
+    if (folderAccountId) {
+      accounts = accounts.filter(acc => String(acc._id) === String(folderAccountId));
+    }
 
     if (!accounts.length) {
       console.log("⚠️ No accounts connected");
       return emptyResponse(view, {});
+    }
+
+    /* ===============================
+       1.5️⃣ BUILD FOLDER LOOKUP MAP
+    =============================== */
+    const folderMap = {};
+    try {
+      const folders = await getAllFolders(userId);
+      folders.forEach(f => {
+        if (f.id && f.name) {
+          folderMap[f.id] = f.name;
+        }
+      });
+    } catch (err) {
+      console.error("❌ Failed to build folder map:", err.message);
     }
 
     /* ===============================
@@ -52,7 +89,27 @@ export const getAllFiles = async (userId, query = {}) => {
           }
 
           if (account.provider === "google") {
-            const res = await fetchGoogleFiles(account, token);
+            const res = await fetchGoogleFiles(account, token, { search, startDate, endDate, folderId, pageSize });
+            
+            files = res?.files || [];
+            newPageTokens[account._id] = res?.nextPageToken || "EOF";
+          } else if (account.provider === "dropbox") {
+            const res = await fetchDropboxFiles(account, token, { search, folderPath, pageSize });
+            
+            files = res?.files || [];
+            newPageTokens[account._id] = res?.nextPageToken || "EOF";
+          } else if (account.provider === "onedrive") {
+            const res = await fetchOneDriveFiles(account, token, { search, folderId, pageSize });
+            
+            files = res?.files || [];
+            newPageTokens[account._id] = res?.nextPageToken || "EOF";
+          } else if (account.provider === "s3") {
+            const res = await fetchS3Files(account, token, { search, folderPath: folderId || folderPath, pageSize });
+            
+            files = res?.files || [];
+            newPageTokens[account._id] = res?.nextPageToken || "EOF";
+          } else if (account.provider === "box") {
+            const res = await fetchBoxFiles(account, token, { search, folderId, pageSize });
             
             files = res?.files || [];
             newPageTokens[account._id] = res?.nextPageToken || "EOF";
@@ -60,14 +117,22 @@ export const getAllFiles = async (userId, query = {}) => {
 
           // 🔥 normalize safely
           return files
-            .map((file) =>
-              normalizeFile(
+            .map((file) => {
+              const normalized = normalizeFile(
                 file,
                 account.provider,
                 account._id,
                 account.email
-              )
-            )
+              );
+              if (normalized) {
+                if (account.provider === "google") {
+                  const parentId = file.parents?.[0];
+                  const parentName = parentId ? folderMap[parentId] : null;
+                  normalized.path = parentName ? `/${parentName}` : "/";
+                }
+              }
+              return normalized;
+            })
             .filter(Boolean);
         } catch (err) {
           console.error(`❌ ${account.provider} error:`, err.message);
@@ -105,6 +170,19 @@ export const getAllFiles = async (userId, query = {}) => {
       allFiles = allFiles.filter((file) =>
         file.name?.toLowerCase().includes(q)
       );
+    }
+
+    /* ===============================
+       5b️⃣ DATE FILTER (LOCAL FALLBACK FOR NON-GOOGLE)
+    =============================== */
+    if (startDate) {
+      const start = new Date(startDate);
+      allFiles = allFiles.filter((f) => !f.createdAt || new Date(f.createdAt) >= start);
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      allFiles = allFiles.filter((f) => !f.createdAt || new Date(f.createdAt) <= end);
     }
 
     /* ===============================
@@ -207,4 +285,57 @@ const emptyResponse = (view) => {
     },
     nextPageTokens: {}
   };
+};
+
+export const getAllFolders = async (userId, accountId = null) => {
+  try {
+    const query = { userId };
+    if (accountId) query._id = accountId;
+    const accounts = await CloudAccount.find(query);
+    const results = await Promise.all(
+      accounts.map(async (account) => {
+        try {
+          if (account.provider === "google") {
+            return await fetchGoogleFolders(account);
+          } else if (account.provider === "dropbox") {
+            return await fetchDropboxFolders(account);
+          } else if (account.provider === "onedrive") {
+            return await fetchOneDriveFolders(account);
+          } else if (account.provider === "s3") {
+            return await fetchS3Folders(account);
+          } else if (account.provider === "box") {
+            return await fetchBoxFolders(account);
+          }
+          return [];
+        } catch (err) {
+          console.error(`❌ ${account.provider} folder query error:`, err.message);
+          return [];
+        }
+      })
+    );
+    return results.flat();
+  } catch (err) {
+    console.error("❌ getAllFolders error:", err.message);
+    return [];
+  }
+};
+
+export const deleteFile = async (userId, { id, provider, accountId }) => {
+  const account = await CloudAccount.findOne({ _id: accountId, userId });
+  if (!account) throw new Error("Account not found");
+
+  if (provider === "google") {
+    await deleteGoogleFile(account, id);
+  } else if (provider === "dropbox") {
+    await deleteDropboxFile(account, id);
+  } else if (provider === "onedrive") {
+    await deleteOneDriveFile(account, id);
+  } else if (provider === "s3") {
+    await deleteS3File(account, id);
+  } else if (provider === "box") {
+    await deleteBoxFile(account, id);
+  }
+  
+  // Clear the file cache after deleting
+  fileCache.clear();
 };

@@ -11,8 +11,16 @@ const Upload = () => {
   const [selectedAccount, setSelectedAccount] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  
+  const [destinationType, setDestinationType] = useState("drive"); // "drive" | "photos"
+  const [folders, setFolders] = useState([]);
+  const [selectedFolder, setSelectedFolder] = useState("root");
+  const [loadingFolders, setLoadingFolders] = useState(false);
+
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
+
+  const isImageOrVideo = file && (file.type.startsWith("image/") || file.type.startsWith("video/"));
 
   useEffect(() => {
     const fetchAccounts = async () => {
@@ -25,6 +33,37 @@ const Upload = () => {
     };
     fetchAccounts();
   }, []);
+
+  // Revert destination type to drive if file is not image/video
+  useEffect(() => {
+    if (file && !isImageOrVideo) {
+      setDestinationType("drive");
+    }
+  }, [file, isImageOrVideo]);
+
+  // Fetch folders for selected account
+  useEffect(() => {
+    if (!selectedAccount) {
+      setFolders([]);
+      setSelectedFolder("root");
+      return;
+    }
+
+    const fetchFolders = async () => {
+      try {
+        setLoadingFolders(true);
+        const res = await API.get(`/google/folders/${selectedAccount}`);
+        setFolders(res.data || []);
+      } catch (err) {
+        console.error("Failed to load folders", err);
+        setFolders([]);
+      } finally {
+        setLoadingFolders(false);
+      }
+    };
+
+    fetchFolders();
+  }, [selectedAccount]);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -67,6 +106,8 @@ const Upload = () => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("accountId", target);
+    formData.append("destinationType", destinationType);
+    formData.append("folderId", selectedFolder);
 
     try {
       setIsUploading(true);
@@ -172,7 +213,7 @@ const Upload = () => {
                       <img src={`/assets/${acc.provider === 'google' ? 'drive' : acc.provider}.png`} alt={acc.provider} />
                       <div className="acc-details">
                         <h5>{acc.email}</h5>
-                        <p>{acc.provider === 'google' ? 'Google Drive' : acc.provider}</p>
+                        <p>{acc.provider === 'google' ? 'Google Drive' : acc.provider === 's3' ? 'Amazon S3' : acc.provider.charAt(0).toUpperCase() + acc.provider.slice(1)}</p>
                       </div>
                     </div>
 
@@ -192,6 +233,36 @@ const Upload = () => {
                 )
               })}
             </div>
+
+            {selectedAccount && (
+              <div className="upload-options-card">
+                <h3>Upload Options</h3>
+                
+
+                {destinationType === "drive" && (
+                  <div className="option-group">
+                    <label htmlFor="folder-select">Target Folder</label>
+                    {loadingFolders ? (
+                      <div className="loading-folders-text">Loading folders...</div>
+                    ) : (
+                      <select
+                        id="folder-select"
+                        value={selectedFolder}
+                        onChange={(e) => setSelectedFolder(e.target.value)}
+                        className="folder-dropdown"
+                      >
+                        <option value="root">📁 Root Folder</option>
+                        {folders.map(folder => (
+                          <option key={folder.id} value={folder.id}>
+                            📁 {folder.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               className="final-upload-btn"

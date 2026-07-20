@@ -19,7 +19,35 @@ export const getProfileSummary = async (req, res) => {
       provider: "google",
     });
 
+    const dropboxAccount = await CloudAccount.findOne({
+      userId,
+      provider: "dropbox",
+    });
+
+    const onedriveAccount = await CloudAccount.findOne({
+      userId,
+      provider: "onedrive",
+    });
+
     const googleConnected = !!googleAccount;
+    const dropboxConnected = !!dropboxAccount;
+    const onedriveConnected = !!onedriveAccount;
+
+    // Calculate aggregate storage across all active accounts
+    let used = 0;
+    let total = 0;
+    if (googleAccount && googleAccount.storage) {
+      used += googleAccount.storage.used || 0;
+      total += googleAccount.storage.total || 0;
+    }
+    if (dropboxAccount && dropboxAccount.storage) {
+      used += dropboxAccount.storage.used || 0;
+      total += dropboxAccount.storage.total || 0;
+    }
+    if (onedriveAccount && onedriveAccount.storage) {
+      used += onedriveAccount.storage.used || 0;
+      total += onedriveAccount.storage.total || 0;
+    }
 
     res.json({
       user: {
@@ -29,14 +57,11 @@ export const getProfileSummary = async (req, res) => {
       },
       connectedAccounts: {
         googleDrive: googleConnected,
-        oneDrive: false,
-        dropbox: false,
+        oneDrive: onedriveConnected,
+        dropbox: dropboxConnected,
       },
-      storage: googleConnected
-        ? {
-            used: googleAccount.storageUsed || 0,
-            total: googleAccount.storageTotal || 0,
-          }
+      storage: (googleConnected || dropboxConnected || onedriveConnected)
+        ? { used, total }
         : null,
     });
   } catch (err) {

@@ -293,7 +293,11 @@ const Profile = () => {
 
               <div className="account-row">
                 <span>Dropbox</span>
-                <span className="status coming-soon">Not connected</span>
+                {connectedAccounts.dropbox ? (
+                  <span className="status connected">Connected</span>
+                ) : (
+                  <span className="status not-connected">Not connected</span>
+                )}
               </div>
             </div>
           </div>

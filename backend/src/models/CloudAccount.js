@@ -37,6 +37,12 @@ const cloudAccountSchema = new mongoose.Schema(
       default: [],
     },
 
+    credentials: {
+      type: Map,
+      of: String,
+      default: {},
+    },
+
     /* ===============================
        STATUS + HEALTH
     =============================== */

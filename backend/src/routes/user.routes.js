@@ -2,6 +2,7 @@ import express from "express";
 import authMiddleware from "../middleware/auth.middleware.js";
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
+import CloudAccount from "../models/CloudAccount.js";
 
 
 const router = express.Router();
@@ -71,42 +72,27 @@ router.delete("/google", authMiddleware, async (req, res) => {
 
 router.get("/profile/summary", authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const accounts = await CloudAccount.find({ userId: req.user.id });
+    const googleConnected = accounts.some(acc => acc.provider === "google");
+    const dropboxConnected = accounts.some(acc => acc.provider === "dropbox");
+    const onedriveConnected = accounts.some(acc => acc.provider === "onedrive");
 
-    let storage = null;
-
-    // If Google Drive connected
-    if (user.google?.accessToken) {
-      const { google } = await import("googleapis");
-
-      const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({
-        access_token: user.google.accessToken,
-        refresh_token: user.google.refreshToken,
-      });
-
-      const drive = google.drive({
-        version: "v3",
-        auth: oauth2Client,
-      });
-
-      const about = await drive.about.get({
-        fields: "storageQuota",
-      });
-
-      storage = {
-        used: Number(about.data.storageQuota.usage) / (1024 ** 3),
-        total: Number(about.data.storageQuota.limit) / (1024 ** 3),
-      };
-    }
+    let used = 0;
+    let total = 0;
+    accounts.forEach(acc => {
+      if (acc.storage) {
+        used += acc.storage.used || 0;
+        total += acc.storage.total || 0;
+      }
+    });
 
     res.json({
       connectedAccounts: {
-        googleDrive: !!user.google,
-        oneDrive: false,
-        dropbox: false,
+        googleDrive: googleConnected,
+        oneDrive: onedriveConnected,
+        dropbox: dropboxConnected,
       },
-      storage,
+      storage: accounts.length > 0 ? { used, total } : null,
     });
   } catch (err) {
     console.error(err);

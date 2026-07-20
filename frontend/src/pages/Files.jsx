@@ -899,7 +899,7 @@ const Files = () => {
     cancelHoverLeave();
     hoverLeaveTimer.current = setTimeout(() => {
       setHoveredPath([]);
-    }, 200);
+    }, 350);
   };
 
   // Helper: get Y offset of an element relative to the hover container
@@ -911,7 +911,9 @@ const Files = () => {
     return elRect.top - containerRect.top;
   };
 
-  const HoverFolderExplorer = () => {
+  // Plain render function (NOT a component) so React diffs the output
+  // in-place instead of unmounting/remounting on every hover state change.
+  const renderHoverFolderExplorer = () => {
     return (
       <div 
         ref={hoverContainerRef}
@@ -1038,37 +1040,6 @@ const Files = () => {
 
     <MainLayout>
       <div className="file-manager-page">
-        {/* TOP TOOLBAR */}
-        <div className="fm-top-bar glass">
-          <div className="fm-search-wrapper">
-            <span className="search-icon">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search files across all accounts..." 
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-                    <div className="fm-top-actions">
-            <div className="view-mode-selector">
-
-              <button 
-                className={`view-btn ${viewMode === "grid" ? "active" : ""}`}
-                onClick={() => setViewMode("grid")}
-                title="Grid View"
-              >
-                Grid
-              </button>
-              <button 
-                className={`view-btn ${viewMode === "list" ? "active" : ""}`}
-                onClick={() => setViewMode("list")}
-                title="List View"
-              >
-                List
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* TITLE BLOCK */}
         <div className="fm-title-block">
@@ -1164,6 +1135,35 @@ const Files = () => {
           {accounts.length === 0 && !loading && (
              <div className="no-accounts-msg">No cloud accounts connected.</div>
           )}
+        </div>
+
+        {/* SEARCH BAR + VIEW TOGGLE — above filters */}
+        <div className="fm-search-row">
+          <div className="fm-search-wrapper">
+            <span className="search-icon">🔍</span>
+            <input 
+              type="text" 
+              placeholder="Search files across all accounts..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="view-mode-selector">
+            <button 
+              className={`view-btn ${viewMode === "grid" ? "active" : ""}`}
+              onClick={() => setViewMode("grid")}
+              title="Grid View"
+            >
+              Grid
+            </button>
+            <button 
+              className={`view-btn ${viewMode === "list" ? "active" : ""}`}
+              onClick={() => setViewMode("list")}
+              title="List View"
+            >
+              List
+            </button>
+          </div>
         </div>
 
         {/* HORIZONTAL FILTERS BAR */}
@@ -1527,7 +1527,7 @@ const Files = () => {
               </div>
 
             ) : (
-              <HoverFolderExplorer />
+              renderHoverFolderExplorer()
             )}
 
           </aside>

@@ -52,7 +52,7 @@ const Upload = () => {
     const fetchFolders = async () => {
       try {
         setLoadingFolders(true);
-        const res = await API.get(`/google/folders/${selectedAccount}`);
+        const res = await API.get(`/files/folders?accountId=${selectedAccount}`);
         setFolders(res.data || []);
       } catch (err) {
         console.error("Failed to load folders", err);

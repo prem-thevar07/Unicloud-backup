@@ -447,85 +447,87 @@ const Dashboard = () => {
             </div>
 
             <div className="breakdown-list">
-              {/* Connected accounts list */}
-              {accounts.map(acc => {
-                const used = acc.storage?.used || 0;
-                const total = acc.storage?.total || 15 * 1024 * 1024 * 1024;
-                const rowPct = total ? (used / total) * 100 : 0;
-                const percentage = rowPct > 0 && rowPct < 1 ? Number(rowPct.toFixed(2)) : Math.round(rowPct);
-                
-                const providerName = acc.provider === 'google' ? 'Google Drive' : acc.provider === 'dropbox' ? 'Dropbox' : acc.provider === 's3' ? 'Amazon S3' : acc.provider === 'box' ? 'Box' : 'OneDrive';
-                const progressClass = acc.provider === 'google' ? 'gd' : acc.provider === 'dropbox' ? 'db' : acc.provider === 's3' ? 's3' : acc.provider === 'box' ? 'box' : 'od';
-                const textClass = acc.provider === 'google' ? 'gd-text' : acc.provider === 'dropbox' ? 'db-text' : acc.provider === 's3' ? 's3-text' : acc.provider === 'box' ? 'box-text' : 'od-text';
-                
-                return (
-                  <div 
-                    key={acc._id} 
-                    className="breakdown-row"
-                    onClick={() => navigate(`/files?accountId=${acc._id}`)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <img src={providerIcons[acc.provider]} alt={providerName} className="provider-logo" />
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                      <span className="provider-name" style={{ fontSize: '13px', fontWeight: '500', display: 'block', marginBottom: '2px' }}>{providerName}</span>
-                      <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{acc.email}</span>
+              <div className="breakdown-scroll-area">
+                {/* Connected accounts list */}
+                {accounts.map(acc => {
+                  const used = acc.storage?.used || 0;
+                  const total = acc.storage?.total || 15 * 1024 * 1024 * 1024;
+                  const rowPct = total ? (used / total) * 100 : 0;
+                  const percentage = rowPct > 0 && rowPct < 1 ? Number(rowPct.toFixed(2)) : Math.round(rowPct);
+                  
+                  const providerName = acc.provider === 'google' ? 'Google Drive' : acc.provider === 'dropbox' ? 'Dropbox' : acc.provider === 's3' ? 'Amazon S3' : acc.provider === 'box' ? 'Box' : 'OneDrive';
+                  const progressClass = acc.provider === 'google' ? 'gd' : acc.provider === 'dropbox' ? 'db' : acc.provider === 's3' ? 's3' : acc.provider === 'box' ? 'box' : 'od';
+                  const textClass = acc.provider === 'google' ? 'gd-text' : acc.provider === 'dropbox' ? 'db-text' : acc.provider === 's3' ? 's3-text' : acc.provider === 'box' ? 'box-text' : 'od-text';
+                  
+                  return (
+                    <div 
+                      key={acc._id} 
+                      className="breakdown-row"
+                      onClick={() => navigate(`/files?accountId=${acc._id}`)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <img src={providerIcons[acc.provider]} alt={providerName} className="provider-logo" />
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                        <span className="provider-name" style={{ fontSize: '13px', fontWeight: '500', display: 'block', marginBottom: '2px' }}>{providerName}</span>
+                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{acc.email}</span>
+                      </div>
+                      <div className="breakdown-progress" style={{ marginLeft: '12px', marginRight: '12px', flex: 1 }}>
+                        <div className={`progress-bar-fill ${progressClass}`} style={{ width: `${percentage}%` }} />
+                      </div>
+                      <span className="provider-sizes" style={{ marginRight: '12px', whiteSpace: 'nowrap' }}>
+                        <strong>{formatSize(used)}</strong> <span className="muted-size" style={{ fontSize: '10px' }}>of {formatSize(total)}</span>
+                      </span>
+                      <span className={`provider-percent ${textClass}`} style={{ minWidth: '35px', textAlign: 'right' }}>{percentage}%</span>
+                      <span className="row-chevron" style={{ marginLeft: '8px' }}>❯</span>
                     </div>
-                    <div className="breakdown-progress" style={{ marginLeft: '12px', marginRight: '12px', flex: 1 }}>
-                      <div className={`progress-bar-fill ${progressClass}`} style={{ width: `${percentage}%` }} />
-                    </div>
-                    <span className="provider-sizes" style={{ marginRight: '12px', whiteSpace: 'nowrap' }}>
-                      <strong>{formatSize(used)}</strong> <span className="muted-size" style={{ fontSize: '10px' }}>of {formatSize(total)}</span>
-                    </span>
-                    <span className={`provider-percent ${textClass}`} style={{ minWidth: '35px', textAlign: 'right' }}>{percentage}%</span>
-                    <span className="row-chevron" style={{ marginLeft: '8px' }}>❯</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
 
-              {/* Mockup Fallback if no accounts connected */}
-              {accounts.length === 0 && (
-                <>
-                  {/* Google Drive Mock */}
-                  <div className="breakdown-row" style={{ opacity: 0.5 }}>
-                    <img src="/assets/drive.png" alt="Google Drive" className="provider-logo" />
-                    <span className="provider-name">Google Drive</span>
-                    <div className="breakdown-progress">
-                      <div className="progress-bar-fill gd" style={{ width: `0%` }} />
+                {/* Mockup Fallback if no accounts connected */}
+                {accounts.length === 0 && (
+                  <>
+                    {/* Google Drive Mock */}
+                    <div className="breakdown-row" style={{ opacity: 0.5 }}>
+                      <img src="/assets/drive.png" alt="Google Drive" className="provider-logo" />
+                      <span className="provider-name">Google Drive</span>
+                      <div className="breakdown-progress">
+                        <div className="progress-bar-fill gd" style={{ width: `0%` }} />
+                      </div>
+                      <span className="provider-sizes">
+                        <strong>0 B</strong> <span className="muted-size">of 15 GB</span>
+                      </span>
+                      <span className="provider-percent gd-text">0%</span>
+                      <span className="row-chevron">❯</span>
                     </div>
-                    <span className="provider-sizes">
-                      <strong>0 B</strong> <span className="muted-size">of 15 GB</span>
-                    </span>
-                    <span className="provider-percent gd-text">0%</span>
-                    <span className="row-chevron">❯</span>
-                  </div>
-                  {/* Dropbox Mock */}
-                  <div className="breakdown-row" style={{ opacity: 0.5 }}>
-                    <img src="/assets/dropbox.png" alt="Dropbox" className="provider-logo" />
-                    <span className="provider-name">Dropbox</span>
-                    <div className="breakdown-progress">
-                      <div className="progress-bar-fill db" style={{ width: `0%` }} />
+                    {/* Dropbox Mock */}
+                    <div className="breakdown-row" style={{ opacity: 0.5 }}>
+                      <img src="/assets/dropbox.png" alt="Dropbox" className="provider-logo" />
+                      <span className="provider-name">Dropbox</span>
+                      <div className="breakdown-progress">
+                        <div className="progress-bar-fill db" style={{ width: `0%` }} />
+                      </div>
+                      <span className="provider-sizes">
+                        <strong>0 B</strong> <span className="muted-size">of 2 GB</span>
+                      </span>
+                      <span className="provider-percent db-text">0%</span>
+                      <span className="row-chevron">❯</span>
                     </div>
-                    <span className="provider-sizes">
-                      <strong>0 B</strong> <span className="muted-size">of 2 GB</span>
-                    </span>
-                    <span className="provider-percent db-text">0%</span>
-                    <span className="row-chevron">❯</span>
-                  </div>
-                  {/* OneDrive Mock */}
-                  <div className="breakdown-row" style={{ opacity: 0.5 }}>
-                    <img src="/assets/onedrive.png" alt="OneDrive" className="provider-logo" />
-                    <span className="provider-name">OneDrive</span>
-                    <div className="breakdown-progress">
-                      <div className="progress-bar-fill od" style={{ width: `0%` }} />
+                    {/* OneDrive Mock */}
+                    <div className="breakdown-row" style={{ opacity: 0.5 }}>
+                      <img src="/assets/onedrive.png" alt="OneDrive" className="provider-logo" />
+                      <span className="provider-name">OneDrive</span>
+                      <div className="breakdown-progress">
+                        <div className="progress-bar-fill od" style={{ width: `0%` }} />
+                      </div>
+                      <span className="provider-sizes">
+                        <strong>0 B</strong> <span className="muted-size">of 5 GB</span>
+                      </span>
+                      <span className="provider-percent od-text">0%</span>
+                      <span className="row-chevron">❯</span>
                     </div>
-                    <span className="provider-sizes">
-                      <strong>0 B</strong> <span className="muted-size">of 5 GB</span>
-                    </span>
-                    <span className="provider-percent od-text">0%</span>
-                    <span className="row-chevron">❯</span>
-                  </div>
-                </>
-              )}
+                  </>
+                )}
+              </div>
 
               <div className="breakdown-divider-line" />
  

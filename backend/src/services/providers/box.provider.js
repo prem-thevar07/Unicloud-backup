@@ -1,4 +1,5 @@
 import axios from "axios";
+import FormData from "form-data";
 import { fileCache } from "../../utils/cache.js";
 
 // Helper to refresh Box access token
@@ -127,11 +128,17 @@ export const fetchBoxFiles = async (account, pageToken = null, options = {}) => 
 const walkBoxFolders = async (account, folderId = "0", currentPath = "", depth = 1) => {
   if (depth > 3) return [];
   try {
-    const url = `https://api.box.com/2.0/folders/${folderId}/items?limit=1000&fields=id,type,name`;
+    const url = `https://api.box.com/2.0/folders/${folderId}/items?limit=1000&fields=id,type,name,owned_by`;
     const res = await makeBoxRequest(account, url);
     const items = res.data.entries || [];
 
-    const folderItems = items.filter(item => item.type === "folder");
+    const folderItems = items.filter(item => item.type === "folder").filter(folder => {
+      if (folder.owned_by && folder.owned_by.login && folder.owned_by.login.toLowerCase() !== account.email.toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+
     const folders = folderItems.map(item => {
       const cleanPath = `${currentPath}/${item.name}`;
       return {
@@ -162,13 +169,19 @@ const walkBoxFolders = async (account, folderId = "0", currentPath = "", depth =
 export const fetchBoxFolders = async (account) => {
   try {
     // Query Box Search for folders recursively
-    const url = "https://api.box.com/2.0/search?query=*&type=folder&limit=1000&fields=id,type,name,path_collection";
+    const url = "https://api.box.com/2.0/search?query=*&type=folder&limit=1000&fields=id,type,name,path_collection,owned_by";
     let res = await makeBoxRequest(account, url);
     let entries = res.data.entries || [];
 
     if (entries.length > 0) {
       const folders = entries
         .filter(item => item.type === "folder")
+        .filter(folder => {
+          if (folder.owned_by && folder.owned_by.login && folder.owned_by.login.toLowerCase() !== account.email.toLowerCase()) {
+            return false;
+          }
+          return true;
+        })
         .map(folder => {
           // Construct path from path_collection
           const pathSegs = (folder.path_collection?.entries || [])
@@ -208,4 +221,80 @@ export const deleteBoxFile = async (account, fileId) => {
     console.error("❌ Box delete file failed:", err.response?.data || err.message);
     throw err;
   }
+};
+
+// Upload Box file
+export const uploadBoxFile = async (account, file, folderId = "0") => {
+  const fs = await import("fs");
+  const uploadUrl = "https://upload.box.com/api/2.0/files/content";
+  const cleanFolderId = folderId && folderId !== "root" ? folderId : "0";
+
+  const form = new FormData();
+  form.append("attributes", JSON.stringify({
+    name: file.originalname,
+    parent: { id: cleanFolderId }
+  }));
+
+  const fileStream = fs.createReadStream(file.path);
+  fileStream.on("error", (err) => {
+    console.error("Box upload file stream error:", err);
+  });
+  form.append("file", fileStream, {
+    filename: file.originalname,
+    contentType: file.mimetype
+  });
+
+  let token = account.accessToken;
+  let attempts = 0;
+  let uploadResponse;
+
+  while (attempts < 2) {
+    try {
+      uploadResponse = await axios.post(uploadUrl, form, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...form.getHeaders()
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+      break;
+    } catch (err) {
+      if (err.response?.status === 401 && attempts === 0 && account.refreshToken) {
+        token = await refreshBoxToken(account);
+        attempts++;
+        
+        // Recreate Form and Stream because stream is fully consumed on first post attempt
+        const newForm = new FormData();
+        newForm.append("attributes", JSON.stringify({
+          name: file.originalname,
+          parent: { id: cleanFolderId }
+        }));
+        
+        const retryStream = fs.createReadStream(file.path);
+        retryStream.on("error", (err) => {
+          console.error("Box retry stream error:", err);
+        });
+        
+        newForm.append("file", retryStream, {
+          filename: file.originalname,
+          contentType: file.mimetype
+        });
+        
+        uploadResponse = await axios.post(uploadUrl, newForm, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...newForm.getHeaders()
+          },
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+        });
+        break;
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  return uploadResponse.data;
 };

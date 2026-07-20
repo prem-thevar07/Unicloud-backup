@@ -60,7 +60,7 @@
 /* CONTENT */
 .content {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
   align-items: start;
 }
@@ -500,4 +500,35 @@
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* Mobile responsiveness for Manage Accounts */
+@media (max-width: 768px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+
+  .add-accounts-group {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .add-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tabs {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-bottom: 12px;
+  }
+
+  .tabs button {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
 }

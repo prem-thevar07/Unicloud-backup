@@ -14,40 +14,44 @@ export const getProfileSummary = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const googleAccount = await CloudAccount.findOne({
-      userId,
-      provider: "google",
-    });
+    // Fetch all accounts connected to the user from DB (instant)
+    const accounts = await CloudAccount.find({ userId });
 
-    const dropboxAccount = await CloudAccount.findOne({
-      userId,
-      provider: "dropbox",
-    });
+    const googleDriveConnected = accounts.some(a => a.provider === "google");
+    const oneDriveConnected = accounts.some(a => a.provider === "onedrive");
+    const dropboxConnected = accounts.some(a => a.provider === "dropbox");
+    const s3Connected = accounts.some(a => a.provider === "s3");
+    const boxConnected = accounts.some(a => a.provider === "box");
 
-    const onedriveAccount = await CloudAccount.findOne({
-      userId,
-      provider: "onedrive",
-    });
-
-    const googleConnected = !!googleAccount;
-    const dropboxConnected = !!dropboxAccount;
-    const onedriveConnected = !!onedriveAccount;
-
-    // Calculate aggregate storage across all active accounts
     let used = 0;
     let total = 0;
-    if (googleAccount && googleAccount.storage) {
-      used += googleAccount.storage.used || 0;
-      total += googleAccount.storage.total || 0;
-    }
-    if (dropboxAccount && dropboxAccount.storage) {
-      used += dropboxAccount.storage.used || 0;
-      total += dropboxAccount.storage.total || 0;
-    }
-    if (onedriveAccount && onedriveAccount.storage) {
-      used += onedriveAccount.storage.used || 0;
-      total += onedriveAccount.storage.total || 0;
-    }
+
+    const breakdown = {
+      googleDrive: null,
+      oneDrive: null,
+      dropbox: null,
+      s3: null,
+      box: null,
+    };
+
+    accounts.forEach((acc) => {
+      if (acc.storage) {
+        used += acc.storage.used || 0;
+        total += acc.storage.total || 0;
+
+        let key = acc.provider;
+        if (key === "google") key = "googleDrive";
+        if (key === "onedrive") key = "oneDrive";
+
+        if (breakdown[key] === null) {
+          breakdown[key] = { used: 0, total: 0 };
+        }
+        breakdown[key].used += acc.storage.used || 0;
+        breakdown[key].total += acc.storage.total || 0;
+      }
+    });
+
+    const hasAnyConnected = accounts.length > 0;
 
     res.json({
       user: {
@@ -56,12 +60,19 @@ export const getProfileSummary = async (req, res) => {
         avatar: user.avatar || null,
       },
       connectedAccounts: {
-        googleDrive: googleConnected,
-        oneDrive: onedriveConnected,
-        dropbox: dropboxConnected,
+        googleDrive: googleDriveConnected ? { connected: true } : null,
+        oneDrive: oneDriveConnected ? { connected: true } : null,
+        dropbox: dropboxConnected ? { connected: true } : null,
+        s3: s3Connected ? { connected: true } : null,
+        box: boxConnected ? { connected: true } : null,
       },
-      storage: (googleConnected || dropboxConnected || onedriveConnected)
-        ? { used, total }
+      totalAccounts: accounts.length,
+      storage: hasAnyConnected
+        ? {
+            used,
+            total,
+            breakdown,
+          }
         : null,
     });
   } catch (err) {
@@ -153,8 +164,40 @@ export const uploadProfilePicture = async (req, res) => {
       return res.status(400).json({ message: "No image file provided" });
     }
 
-    const backendBaseUrl = process.env.BACKEND_URL || "http://localhost:5001";
-    const avatarUrl = `${backendBaseUrl}/uploads/${req.file.filename}`;
+    const fs = await import("fs");
+    let avatarUrl = "";
+
+    const hasCloudinaryEnv =
+      process.env.CLOUDINARY_CLOUD_NAME &&
+      process.env.CLOUDINARY_API_KEY &&
+      process.env.CLOUDINARY_API_SECRET;
+
+    if (hasCloudinaryEnv) {
+      console.log("☁️ Cloudinary credentials found. Uploading avatar to Cloudinary...");
+      const { v2: cloudinary } = await import("cloudinary");
+      
+      cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+      });
+
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "unicloud_avatars",
+        resource_type: "image",
+      });
+
+      avatarUrl = uploadResult.secure_url;
+
+      // Clean up local temp file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    } else {
+      console.warn("⚠️ Cloudinary credentials missing. Falling back to local disk storage.");
+      const backendBaseUrl = process.env.BACKEND_URL || "http://localhost:5001";
+      avatarUrl = `${backendBaseUrl}/uploads/${req.file.filename}`;
+    }
 
     const user = await User.findByIdAndUpdate(
       userId,
@@ -172,6 +215,15 @@ export const uploadProfilePicture = async (req, res) => {
     });
   } catch (err) {
     console.error("Upload profile picture error:", err);
-    res.status(500).json({ message: "Failed to upload picture" });
+    
+    // Clean up local file in case of crash
+    try {
+      const fs = await import("fs");
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    } catch (_) {}
+
+    res.status(500).json({ message: "Failed to upload picture", error: err.message });
   }
 };

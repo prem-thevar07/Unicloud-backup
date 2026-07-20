@@ -120,7 +120,7 @@ export const fetchGoogleFolders = async (account) => {
     const drive = google.drive({ version: "v3", auth: oauth2Client });
     const res = await drive.files.list({
       pageSize: 100,
-      q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+      q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false and 'me' in owners",
       fields: "files(id, name, createdTime)",
     });
     return (res.data.files || []).map(f => ({

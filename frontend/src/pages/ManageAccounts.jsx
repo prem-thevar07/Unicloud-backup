@@ -34,6 +34,18 @@ const ManageAccounts = () => {
     fetchAccounts();
   }, []);
 
+  // Auto-select first visible account when provider tab changes
+  useEffect(() => {
+    if (accounts.length > 0) {
+      const visible = activeProvider === "all" ? accounts : accounts.filter(a => a.provider === activeProvider);
+      if (!visible.some(a => a._id === selected?._id)) {
+        setSelected(visible[0] || null);
+      }
+    } else {
+      setSelected(null);
+    }
+  }, [activeProvider, accounts]);
+
   /* ===============================
      FETCH ACCOUNTS
   =============================== */
@@ -356,8 +368,6 @@ const ManageAccounts = () => {
               </>
             )}
           </div>
-
-
 
         </div>
       </div>

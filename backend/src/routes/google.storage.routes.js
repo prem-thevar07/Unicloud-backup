@@ -305,7 +305,7 @@ router.get("/folders/:accountId", auth, async (req, res) => {
 
     // Query non-trashed folders
     const response = await drive.files.list({
-      q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+      q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false and 'me' in owners",
       fields: "files(id, name)",
       pageSize: 100,
     });

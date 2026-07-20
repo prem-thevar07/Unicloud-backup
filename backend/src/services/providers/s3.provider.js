@@ -1,4 +1,4 @@
-import { S3Client, ListObjectsV2Command, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, ListObjectsV2Command, DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const getS3Client = (account) => {
   const getCred = (key) => account.credentials?.get ? account.credentials.get(key) : account.credentials?.[key];
@@ -148,4 +148,43 @@ export const deleteS3File = async (account, fileId) => {
     console.error("❌ S3 deleteS3File failed:", err.message);
     throw err;
   }
+};
+
+// Upload S3 file
+export const uploadS3File = async (account, file, folderPath) => {
+  const client = getS3Client(account);
+  const bucket = getBucketName(account);
+  const fs = await import("fs");
+
+  let key = file.originalname;
+  if (folderPath && folderPath !== "root") {
+    let cleanFolder = folderPath;
+    if (cleanFolder.startsWith("/")) {
+      cleanFolder = cleanFolder.slice(1);
+    }
+    if (cleanFolder && !cleanFolder.endsWith("/")) {
+      cleanFolder += "/";
+    }
+    key = cleanFolder + key;
+  }
+
+  const fileStream = fs.createReadStream(file.path);
+  fileStream.on("error", (err) => {
+    console.error("S3 upload stream error:", err);
+  });
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: fileStream,
+    ContentType: file.mimetype,
+  });
+
+  const response = await client.send(command);
+  return {
+    id: key,
+    name: file.originalname,
+    path: "/" + key,
+    response,
+  };
 };

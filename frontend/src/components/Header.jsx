@@ -10,6 +10,7 @@ const Header = () => {
 
   const [user, setUser] = useState(null);
   const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   /* ===============================
      USER SYNC
@@ -55,6 +56,7 @@ const Header = () => {
   const handleLogout = () => {
     localStorage.clear();
     setOpen(false);
+    setMobileOpen(false);
     navigate("/auth");
   };
 
@@ -71,35 +73,35 @@ const Header = () => {
     <header className="header">
       <div className="header-container">
         {/* LEFT: LOGO */}
-        <Link to="/" className="logo">
+        <Link to="/" className="logo" onClick={() => setMobileOpen(false)}>
           <img src="/assets/logo.png" alt="Unicloud Logo" className="logo-img" style={{ height: "28px", objectFit: "contain" }} />
           <span className="logo-text">Unicloud</span>
         </Link>
 
         {/* CENTER: NAV LINKS */}
-        <nav className="nav-links">
-          <Link to="/#features" className={`nav-item ${isActive("/#features") ? "active" : ""}`}>
+        <nav className={`nav-links ${mobileOpen ? "mobile-open" : ""}`}>
+          <Link to="/#features" className={`nav-item ${isActive("/#features") ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
             Home
           </Link>
-          <Link to="/about" className={`nav-item ${isActive("/about") ? "active" : ""}`}>
+          <Link to="/about" className={`nav-item ${isActive("/about") ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
             About
           </Link>
 
           {user && (
             <>
-              <Link to="/dashboard" className={`nav-item ${isActive("/dashboard") ? "active" : ""}`}>
+              <Link to="/dashboard" className={`nav-item ${isActive("/dashboard") ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
                 Dashboard
               </Link>
-              <Link to="/files" className={`nav-item ${isActive("/files") ? "active" : ""}`}>
+              <Link to="/files" className={`nav-item ${isActive("/files") ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
                 Files
               </Link>
-              <Link to="/photos" className={`nav-item ${isActive("/photos") ? "active" : ""}`}>
+              <Link to="/photos" className={`nav-item ${isActive("/photos") ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
                 Photos
               </Link>
-              <Link to="/manage-accounts" className={`nav-item ${isActive("/manage-accounts") ? "active" : ""}`}>
+              <Link to="/manage-accounts" className={`nav-item ${isActive("/manage-accounts") ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
                 Manage Accounts
               </Link>
-              <Link to="/upload" className="header-upload-btn">
+              <Link to="/upload" className="header-upload-btn" onClick={() => setMobileOpen(false)}>
                 + Upload
               </Link>
             </>
@@ -108,6 +110,16 @@ const Header = () => {
 
         {/* RIGHT: AUTH / PROFILE */}
         <div className="nav-right">
+          <button className="mobile-toggle-btn" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {mobileOpen ? (
+                <path d="M18 6L6 18M6 6l12 12" />
+              ) : (
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+
           {!user ? (
             <Link to="/auth" className="btn-primary">
               Login / Sign Up

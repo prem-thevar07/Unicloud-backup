@@ -351,6 +351,31 @@
   gap: 12px;
 }
 
+.breakdown-scroll-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* Custom scrollbar for breakdown list */
+.breakdown-scroll-area::-webkit-scrollbar {
+  width: 6px;
+}
+.breakdown-scroll-area::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 3px;
+}
+.breakdown-scroll-area::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+.breakdown-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 .breakdown-row {
   display: flex;
   align-items: center;
@@ -738,6 +763,25 @@
   flex-direction: column;
   gap: 1rem;
   margin-top: 1rem;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* Custom scrollbar for activity list */
+.activity-timeline-list::-webkit-scrollbar {
+  width: 6px;
+}
+.activity-timeline-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 3px;
+}
+.activity-timeline-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+.activity-timeline-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .timeline-item {

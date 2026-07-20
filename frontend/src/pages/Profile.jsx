@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import API from "../config/api";
 import "../styles/profile.css";
 import Header from "../components/Header";
@@ -7,58 +8,98 @@ const Profile = () => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Editable fields
   const [isEditingName, setIsEditingName] = useState(false);
   const [name, setName] = useState("");
   const [updating, setUpdating] = useState(false);
   const [uploadingPic, setUploadingPic] = useState(false);
 
-  const [isEditingPassword, setIsEditingPassword] = useState(false);
+  // Change password fields
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordUpdating, setPasswordUpdating] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
-  // 🔐 Change password
-  const handlePasswordUpdate = async () => {
-    if (!currentPassword || !newPassword) return;
+  // Unlinking confirmation modal
+  const [unlinkAccount, setUnlinkAccount] = useState(null); // null or { id, provider, email }
+  const [unlinking, setUnlinking] = useState(false);
 
-    try {
-      setPasswordUpdating(true);
+  // Dynamic toasts
+  const [toast, setToast] = useState(null); // null or { type: "success" | "error", message }
+  const toastTimeoutRef = useRef(null);
 
-      await API.put("/profile/change-password", {
-        currentPassword,
-        newPassword,
-      });
+  const fileInputRef = useRef(null);
+  const navigate = useNavigate();
 
-      setCurrentPassword("");
-      setNewPassword("");
-      setIsEditingPassword(false);
-
-      alert("Password updated successfully");
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to update password");
-    } finally {
-      setPasswordUpdating(false);
+  const showToast = (type, message) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
     }
+    setToast({ type, message });
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+    }, 4000);
   };
 
   // 👤 Fetch profile
+  const fetchProfile = async () => {
+    try {
+      const res = await API.get("/profile/summary");
+      setProfile(res.data);
+      setName(res.data.user.name);
+    } catch (err) {
+      console.error("Failed to load profile", err);
+      showToast("error", "Failed to retrieve profile details.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await API.get("/profile/summary");
-        setProfile(res.data);
-        setName(res.data.user.name);
-      } catch (err) {
-        console.error("Failed to load profile", err);
-      } finally {
-        setLoading(false);
+    fetchProfile();
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
       }
     };
-
-    fetchProfile();
   }, []);
 
-  // 📸 Upload picture
+  // ✏️ Update name
+  const handleNameUpdate = async () => {
+    if (!name.trim()) return;
+
+    try {
+      setUpdating(true);
+      await API.put("/profile/update-name", { name: name.trim() });
+
+      // Update local state
+      setProfile((prev) => ({
+        ...prev,
+        user: { ...prev.user, name: name.trim() },
+      }));
+
+      // Update localStorage for Header sync
+      const storedUser = JSON.parse(localStorage.getItem("user"));
+      if (storedUser) {
+        localStorage.setItem(
+          "user",
+          JSON.stringify({ ...storedUser, name: name.trim() })
+        );
+      }
+
+      window.dispatchEvent(new Event("user-updated"));
+      setIsEditingName(false);
+      showToast("success", "Name updated successfully!");
+    } catch (err) {
+      console.error("Failed to update name", err);
+      showToast("error", err.response?.data?.message || "Failed to update name.");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // 📸 Upload avatar picture
   const handlePictureUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -76,13 +117,11 @@ const Profile = () => {
 
       const newAvatar = res.data.avatar;
 
-      // Update UI
       setProfile((prev) => ({
         ...prev,
         user: { ...prev.user, avatar: newAvatar },
       }));
 
-      // Update localStorage (for Header)
       const storedUser = JSON.parse(localStorage.getItem("user"));
       if (storedUser) {
         localStorage.setItem(
@@ -91,122 +130,325 @@ const Profile = () => {
         );
       }
 
-      // Notify Header
       window.dispatchEvent(new Event("user-updated"));
-
+      showToast("success", "Profile picture updated!");
     } catch (err) {
       console.error("Failed to upload picture", err);
-      alert(err.response?.data?.message || "Failed to upload picture");
+      showToast("error", err.response?.data?.message || "Failed to upload avatar.");
     } finally {
       setUploadingPic(false);
-      e.target.value = null; // reset input
+      e.target.value = null;
     }
   };
 
-  // ✏️ Update name
-  const handleNameUpdate = async () => {
-    if (!name.trim()) return;
+  // 🔐 Change password
+  const handlePasswordUpdate = async () => {
+    if (!currentPassword || !newPassword) return;
+    if (newPassword.length < 6) {
+      return showToast("error", "New password must be at least 6 characters.");
+    }
 
     try {
-      setUpdating(true);
+      setPasswordUpdating(true);
+      await API.put("/profile/change-password", {
+        currentPassword,
+        newPassword,
+      });
 
-      await API.put("/profile/update-name", { name });
-
-      // Update UI
-      setProfile((prev) => ({
-        ...prev,
-        user: { ...prev.user, name },
-      }));
-
-      // Update localStorage (for Header)
-      const storedUser = JSON.parse(localStorage.getItem("user"));
-      if (storedUser) {
-        localStorage.setItem(
-          "user",
-          JSON.stringify({ ...storedUser, name })
-        );
-      }
-
-      // Notify Header
-      window.dispatchEvent(new Event("user-updated"));
-
-      setIsEditingName(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      showToast("success", "Password changed successfully!");
     } catch (err) {
-      console.error("Failed to update name", err);
+      showToast("error", err.response?.data?.message || "Current password incorrect.");
     } finally {
-      setUpdating(false);
+      setPasswordUpdating(false);
     }
   };
 
-  if (loading) return <p className="loading">Loading profile...</p>;
-  if (!profile) return <p className="error">Failed to load profile</p>;
+  // 🔌 Disconnect account
+  const handleDisconnectConfirm = async () => {
+    if (!unlinkAccount) return;
+    try {
+      setUnlinking(true);
+      await API.delete(`/accounts/${unlinkAccount.id}`);
+      showToast("success", `Unlinked account: ${unlinkAccount.email}`);
+      setUnlinkAccount(null);
+      // Reload profile to refresh connection desk & storage limits
+      await fetchProfile();
+    } catch (err) {
+      console.error("Unlink error:", err);
+      showToast("error", "Failed to disconnect account.");
+    } finally {
+      setUnlinking(false);
+    }
+  };
 
-  const { user, connectedAccounts } = profile;
+  // ⚙️ Password strength logic
+  const getPasswordStrength = (pwd) => {
+    if (!pwd) return { score: 0, label: "None", colorClass: "" };
+    if (pwd.length < 6) return { score: 1, label: "Weak", colorClass: "weak" };
+    
+    // Check complexity
+    const hasNumbers = /\d/.test(pwd);
+    const hasSpecial = /[^A-Za-z0-9]/.test(pwd);
+    
+    if (pwd.length >= 8 && hasNumbers && hasSpecial) {
+      return { score: 3, label: "Strong", colorClass: "strong" };
+    }
+    return { score: 2, label: "Medium", colorClass: "medium" };
+  };
+
+  const formatSize = (bytes) => {
+    if (!bytes) return "0 B";
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(1) + " " + sizes[i];
+  };
+
+  if (loading) {
+    return (
+      <>
+        <Header />
+        <div className="profile-page" style={{ display: 'flex', justifyContent: 'center', padding: '100px 0' }}>
+          <p style={{ color: '#9ca3af' }}>Loading profile information...</p>
+        </div>
+      </>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <>
+        <Header />
+        <div className="profile-page" style={{ display: 'flex', justifyContent: 'center', padding: '100px 0' }}>
+          <p style={{ color: '#f87171' }}>Failed to load profile. Please refresh.</p>
+        </div>
+      </>
+    );
+  }
+
+  const { user, connectedAccounts, storage } = profile;
+  const strengthInfo = getPasswordStrength(newPassword);
+
+  // Total connections count
+  const connectionsCount = profile.totalAccounts || 0;
 
   return (
     <>
       <Header />
 
       <div className="profile-page">
-        <h1 className="profile-title">Profile</h1>
-        <p className="profile-subtitle">
-          Manage your account & connected services
-        </p>
+        {/* Page Toast */}
+        {toast && (
+          <div className={`profile-toast ${toast.type}`}>
+            <span>{toast.type === "success" ? "✅" : "❌"}</span>
+            <span>{toast.message}</span>
+          </div>
+        )}
 
-        <div className="profile-grid">
-          {/* LEFT COLUMN */}
-          <div className="left-column">
-            {/* PROFILE CARD */}
-            <div className="card">
-              <div className="avatar-row">
-                <div className="avatar" style={{ padding: user.avatar ? "0" : undefined, overflow: "hidden" }}>
-                  {user.avatar ? (
-                    <img src={user.avatar} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  ) : (
-                    user.name?.charAt(0).toUpperCase()
-                  )}
-                </div>
-                <input 
-                  type="file" 
-                  id="profilePicInput" 
-                  style={{ display: "none" }} 
-                  accept="image/*" 
-                  onChange={handlePictureUpload} 
-                />
+        {/* Confirmation Modal */}
+        {unlinkAccount && (
+          <div className="profile-modal-overlay" onClick={() => setUnlinkAccount(null)}>
+            <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+              <h4>Disconnect Account</h4>
+              <p>
+                Are you sure you want to disconnect <strong>{unlinkAccount.email}</strong> from{" "}
+                <strong>
+                  {unlinkAccount.provider === "googleDrive" ? "Google Drive" : unlinkAccount.provider === "oneDrive" ? "OneDrive" : unlinkAccount.provider.charAt(0).toUpperCase() + unlinkAccount.provider.slice(1)}
+                </strong>? This will remove sync and list privileges.
+              </p>
+              <div className="profile-modal-actions">
                 <button 
-                  className="btn-secondary" 
-                  onClick={() => document.getElementById('profilePicInput').click()}
-                  disabled={uploadingPic}
+                  className="profile-modal-btn-cancel" 
+                  onClick={() => setUnlinkAccount(null)}
+                  disabled={unlinking}
                 >
-                  {uploadingPic ? "Uploading..." : "Change picture"}
+                  Cancel
+                </button>
+                <button 
+                  className="profile-modal-btn-confirm" 
+                  onClick={handleDisconnectConfirm}
+                  disabled={unlinking}
+                >
+                  {unlinking ? "Unlinking..." : "Disconnect"}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
 
-              <label>Name</label>
-              <input
-                value={name}
-                disabled={!isEditingName}
-                onChange={(e) => setName(e.target.value)}
-              />
+        <div className="profile-header-section">
+          <h1>Profile Hub</h1>
+          <p>Configure personal details, inspect cloud integrations, and supervise active storage limits.</p>
+        </div>
+
+        <div className="profile-layout-grid">
+          {/* LEFT COLUMN: Summary & Settings */}
+          <div className="profile-column">
+            {/* HERO PROFILE PICTURE & STORAGE */}
+            <div className="profile-glass-card">
+              <div className="profile-avatar-center-wrapper">
+                <div 
+                  className="profile-avatar-interactive" 
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <div className="profile-avatar-inner">
+                    {user.avatar ? (
+                      <img src={user.avatar} alt="Avatar" />
+                    ) : (
+                      user.name?.charAt(0).toUpperCase()
+                    )}
+                    <div className="profile-avatar-overlay">
+                      <span>📷</span>
+                      <span>Upload</span>
+                    </div>
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  style={{ display: "none" }}
+                  accept="image/*"
+                  onChange={handlePictureUpload}
+                  disabled={uploadingPic}
+                />
+                <h4 style={{ fontSize: "20px", fontWeight: "700", color: "#f3f4f6", margin: "4px 0" }}>
+                  {user.name}
+                </h4>
+                <p style={{ fontSize: "13px", color: "#9ca3af" }}>{user.email}</p>
+                <span className="avatar-upload-subtext">
+                  {uploadingPic ? "Uploading..." : "Click photo to edit"}
+                </span>
+              </div>
+
+              {/* STORAGE UTILIZATION */}
+              <div className="profile-storage-info">
+                <div className="profile-storage-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "8px", fontSize: "13px", color: "#9ca3af", gap: "16px" }}>
+                  <span>Aggregate Cloud Storage</span>
+                  {storage ? (
+                    <span className="highlight" style={{ fontWeight: "600", color: "#e5e7eb", textAlign: "right", marginLeft: "auto" }}>
+                      {formatSize(storage.used)} / {formatSize(storage.total)} used
+                    </span>
+                  ) : (
+                    <span style={{ textAlign: "right", marginLeft: "auto" }}>0 B used</span>
+                  )}
+                </div>
+                <div className="profile-storage-progress-bg">
+                  <div 
+                    className="profile-storage-progress-fill"
+                    style={{ 
+                      width: storage ? `${Math.min((storage.used / storage.total) * 100, 100)}%` : "0%" 
+                    }}
+                  />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
+                  <span className="profile-storage-subtext">
+                    Total Connected accounts: {connectionsCount}
+                  </span>
+                  {storage && (
+                    <span className="profile-storage-subtext" style={{ fontWeight: "600", color: "#9ca3af" }}>
+                      {((storage.used / storage.total) * 100).toFixed(1)}% full
+                    </span>
+                  )}
+                </div>
+
+                {/* Storage Breakdown Details */}
+                {storage?.breakdown && (
+                  <div style={{ marginTop: "16px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }}>
+                    <h5 style={{ fontSize: "11px", fontWeight: "600", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: "8px" }}>
+                      Storage Breakdown
+                    </h5>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {storage.breakdown.googleDrive && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#9ca3af" }}>
+                          <span>Google Drive</span>
+                          <span style={{ color: "#e5e7eb", fontWeight: "500" }}>
+                            {formatSize(storage.breakdown.googleDrive.used)} / {formatSize(storage.breakdown.googleDrive.total)}
+                          </span>
+                        </div>
+                      )}
+                      {storage.breakdown.oneDrive && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#9ca3af" }}>
+                          <span>OneDrive</span>
+                          <span style={{ color: "#e5e7eb", fontWeight: "500" }}>
+                            {formatSize(storage.breakdown.oneDrive.used)} / {formatSize(storage.breakdown.oneDrive.total)}
+                          </span>
+                        </div>
+                      )}
+                      {storage.breakdown.dropbox && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#9ca3af" }}>
+                          <span>Dropbox</span>
+                          <span style={{ color: "#e5e7eb", fontWeight: "500" }}>
+                            {formatSize(storage.breakdown.dropbox.used)} / {formatSize(storage.breakdown.dropbox.total)}
+                          </span>
+                        </div>
+                      )}
+                      {storage.breakdown.s3 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#9ca3af" }}>
+                          <span>Amazon S3</span>
+                          <span style={{ color: "#e5e7eb", fontWeight: "500" }}>
+                            {formatSize(storage.breakdown.s3.used)} / {formatSize(storage.breakdown.s3.total)}
+                          </span>
+                        </div>
+                      )}
+                      {storage.breakdown.box && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#9ca3af" }}>
+                          <span>Box</span>
+                          <span style={{ color: "#e5e7eb", fontWeight: "500" }}>
+                            {formatSize(storage.breakdown.box.used)} / {formatSize(storage.breakdown.box.total)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ACCOUNT PREFERENCES */}
+            <div className="profile-glass-card">
+              <h3>Account Preferences</h3>
+              
+              <div className="profile-form-group">
+                <label>Name</label>
+                <div className="profile-input-wrapper">
+                  <input
+                    value={name}
+                    disabled={!isEditingName}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your name"
+                  />
+                </div>
+              </div>
+
+              <div className="profile-form-group">
+                <label>Email Address</label>
+                <div className="profile-input-wrapper has-icon">
+                  <input value={user.email} disabled />
+                  <span className="profile-input-icon">🔒</span>
+                </div>
+              </div>
 
               {!isEditingName ? (
                 <button
-                  className="btn-primary"
+                  className="profile-btn-primary"
                   onClick={() => setIsEditingName(true)}
                 >
-                  Edit Name
+                  Edit Profile Name
                 </button>
               ) : (
-                <div className="btn-row">
+                <div className="profile-btn-row">
                   <button
-                    className="btn-primary"
+                    className="profile-btn-primary"
                     onClick={handleNameUpdate}
-                    disabled={updating}
+                    disabled={updating || !name.trim()}
                   >
-                    {updating ? "Saving..." : "Save"}
+                    {updating ? "Saving..." : "Save Changes"}
                   </button>
                   <button
-                    className="btn-secondary"
+                    className="profile-btn-secondary"
                     onClick={() => {
                       setName(user.name);
                       setIsEditingName(false);
@@ -216,89 +458,154 @@ const Profile = () => {
                   </button>
                 </div>
               )}
-
-              <label>Email</label>
-              <input value={user.email} disabled />
-            </div>
-
-            {/* CHANGE PASSWORD */}
-            <div className="card">
-              <h3>Change Password</h3>
-
-              <input
-                type="password"
-                placeholder="Current password"
-                value={currentPassword}
-                disabled={!isEditingPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-              />
-
-              <input
-                type="password"
-                placeholder="New password"
-                value={newPassword}
-                disabled={!isEditingPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-
-              {!isEditingPassword ? (
-                <button
-                  className="btn-primary"
-                  onClick={() => setIsEditingPassword(true)}
-                >
-                  Change Password
-                </button>
-              ) : (
-                <div className="btn-row">
-                  <button
-                    className="btn-primary"
-                    onClick={handlePasswordUpdate}
-                    disabled={passwordUpdating}
-                  >
-                    {passwordUpdating ? "Saving..." : "Save"}
-                  </button>
-                  <button
-                    className="btn-secondary"
-                    onClick={() => {
-                      setCurrentPassword("");
-                      setNewPassword("");
-                      setIsEditingPassword(false);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* RIGHT COLUMN */}
-          <div className="right-column">
-            <div className="card">
-              <h3>Connected Accounts</h3>
-
-              <div className="account-row">
-                <span>Google Drive</span>
-                {connectedAccounts.googleDrive ? (
-                  <span className="status connected">Connected</span>
+          {/* RIGHT COLUMN: Password & Connections */}
+          <div className="profile-column">
+            {/* CLOUD CONNECTIONS DESK */}
+            <div className="profile-glass-card">
+              <h3>Cloud Connections Desk</h3>
+              <div className="profile-accounts-container">
+                {connectionsCount === 0 ? (
+                  <p style={{ color: "#9ca3af", fontSize: "14px", textAlign: "center", margin: "20px 0" }}>
+                    No cloud accounts connected yet.
+                  </p>
                 ) : (
-                  <span className="status not-connected">Not connected</span>
+                  <>
+                    {connectedAccounts.googleDrive && (
+                      <div className="profile-account-row">
+                        <div className="profile-account-brand">
+                          <img src="/assets/drive.png" alt="Google Drive" />
+                          <div className="profile-account-name-details">
+                            <h5>Google Drive</h5>
+                          </div>
+                        </div>
+                        <span className="profile-badge connected">Connected</span>
+                      </div>
+                    )}
+
+                    {connectedAccounts.oneDrive && (
+                      <div className="profile-account-row">
+                        <div className="profile-account-brand">
+                          <img src="/assets/onedrive.png" alt="OneDrive" />
+                          <div className="profile-account-name-details">
+                            <h5>OneDrive</h5>
+                          </div>
+                        </div>
+                        <span className="profile-badge connected">Connected</span>
+                      </div>
+                    )}
+
+                    {connectedAccounts.dropbox && (
+                      <div className="profile-account-row">
+                        <div className="profile-account-brand">
+                          <img src="/assets/dropbox.png" alt="Dropbox" />
+                          <div className="profile-account-name-details">
+                            <h5>Dropbox</h5>
+                          </div>
+                        </div>
+                        <span className="profile-badge connected">Connected</span>
+                      </div>
+                    )}
+
+                    {connectedAccounts.s3 && (
+                      <div className="profile-account-row">
+                        <div className="profile-account-brand">
+                          <img src="/assets/s3.png" alt="S3" />
+                          <div className="profile-account-name-details">
+                            <h5>Amazon S3</h5>
+                          </div>
+                        </div>
+                        <span className="profile-badge connected">Connected</span>
+                      </div>
+                    )}
+
+                    {connectedAccounts.box && (
+                      <div className="profile-account-row">
+                        <div className="profile-account-brand">
+                          <img src="/assets/box.png" alt="Box" />
+                          <div className="profile-account-name-details">
+                            <h5>Box</h5>
+                          </div>
+                        </div>
+                        <span className="profile-badge connected">Connected</span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <button
+                  className="profile-btn-primary"
+                  style={{ width: "100%", marginTop: "16px" }}
+                  onClick={() => navigate("/manage-accounts")}
+                >
+                  ⚙️ Manage Cloud Connections
+                </button>
+              </div>
+            </div>
+
+            {/* SECURITY CREDENTIALS (PASSWORD) */}
+            <div className="profile-glass-card">
+              <h3>Security & Credentials</h3>
+              
+              <div className="profile-form-group">
+                <label>Current Password</label>
+                <div className="profile-input-wrapper has-icon">
+                  <input
+                    type={showCurrentPassword ? "text" : "password"}
+                    placeholder="Enter current password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                  <button 
+                    type="button"
+                    className="profile-eye-toggle"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  >
+                    {showCurrentPassword ? "👁️‍🗨️" : "👁️"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="profile-form-group">
+                <label>New Password</label>
+                <div className="profile-input-wrapper has-icon">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    placeholder="Enter new password (min. 6 chars)"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <button 
+                    type="button"
+                    className="profile-eye-toggle"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                  >
+                    {showNewPassword ? "👁️‍🗨️" : "👁️"}
+                  </button>
+                </div>
+                
+                {/* Password strength visualizer */}
+                {newPassword && (
+                  <div className="profile-strength-meter">
+                    <div className="profile-strength-bar-bg">
+                      <div className={`profile-strength-bar-fill ${strengthInfo.colorClass}`} />
+                    </div>
+                    <div className="profile-strength-label">
+                      Strength: <span className={strengthInfo.colorClass}>{strengthInfo.label}</span>
+                    </div>
+                  </div>
                 )}
               </div>
 
-              <div className="account-row">
-                <span>OneDrive</span>
-                <span className="status coming-soon">Not connected</span>
-              </div>
-
-              <div className="account-row">
-                <span>Dropbox</span>
-                {connectedAccounts.dropbox ? (
-                  <span className="status connected">Connected</span>
-                ) : (
-                  <span className="status not-connected">Not connected</span>
-                )}
-              </div>
+              <button
+                className="profile-btn-primary"
+                onClick={handlePasswordUpdate}
+                disabled={passwordUpdating || !currentPassword || !newPassword || newPassword.length < 6}
+              >
+                {passwordUpdating ? "Saving password..." : "Update Security Password"}
+              </button>
             </div>
           </div>
         </div>

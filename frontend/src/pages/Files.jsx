@@ -199,8 +199,19 @@ const Files = () => {
   const [hoveredPath, setHoveredPath] = useState([]);
   const [flyoutTops, setFlyoutTops] = useState([]);
   const hoverContainerRef = useRef(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-
+  // Fallback to Classic Tree mode on mobile screens
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth <= 768) {
+        setFoldersViewMode("classic");
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Filters
   const [activeCategory, setActiveCategory] = useState("all");
@@ -1421,10 +1432,18 @@ const Files = () => {
 
         </div>
 
-                {/* VERTICAL SPLIT SCREEN LAYOUT */}
+        {/* MOBILE SIDEBAR TOGGLE BUTTON */}
+        <button 
+          className="mobile-sidebar-toggle-btn"
+          onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+        >
+          📁 {mobileSidebarOpen ? "Hide Accounts & Folders" : "Show Accounts & Folders"}
+        </button>
+
+        {/* VERTICAL SPLIT SCREEN LAYOUT */}
         <div className="fm-split-layout">
-                    {/* LEFT PANE: ACCOUNTS & NESTED COLLAPSIBLE FOLDERS */}
-          <aside className="fm-left-pane">
+          {/* LEFT PANE: ACCOUNTS & NESTED COLLAPSIBLE FOLDERS */}
+          <aside className={`fm-left-pane ${mobileSidebarOpen ? "mobile-open" : ""}`}>
             <div className="fm-folders-section-vertical">
               <div className="section-header">
                 <h3>Accounts <span className="item-count">{accounts.length}</span></h3>

@@ -201,9 +201,13 @@ const Files = () => {
   const hoverContainerRef = useRef(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [selectedMobileFile, setSelectedMobileFile] = useState(null);
+
   // Fallback to Classic Tree mode on mobile screens
   useEffect(() => {
     const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
       if (window.innerWidth <= 768) {
         setFoldersViewMode("classic");
       }
@@ -218,6 +222,7 @@ const Files = () => {
   const [activeSubCategory, setActiveSubCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [timeline, setTimeline] = useState("all");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
@@ -527,25 +532,44 @@ const Files = () => {
   };
 
 
-    const hasMoreInCloud = Object.values(pageTokens).some(token => token !== "EOF");
+  const hasMoreInCloud = Object.values(pageTokens).some(token => token !== "EOF");
 
-    const handleScroll = (e) => {
-    const { scrollTop, clientHeight, scrollHeight } = e.target;
-    // Trigger when within 100px of the bottom
-    if (scrollHeight - scrollTop <= clientHeight + 100) {
-      if (!loading && !isFetchingRef.current && !localLoadingMore) {
-        if (visibleCount < filteredFiles.length) {
-          setLocalLoadingMore(true);
-          setTimeout(() => {
-            setVisibleCount((prev) => prev + 15);
-            setLocalLoadingMore(false);
-          }, 350);
-        } else if (hasMoreInCloud) {
-          fetchMoreFromCloud();
-        }
+  const triggerLoadMore = () => {
+    if (!loading && !isFetchingRef.current && !localLoadingMore && !loadingMoreCloud) {
+      if (visibleCount < filteredFiles.length) {
+        setLocalLoadingMore(true);
+        setTimeout(() => {
+          setVisibleCount((prev) => prev + 15);
+          setLocalLoadingMore(false);
+        }, 350);
+      } else if (hasMoreInCloud) {
+        fetchMoreFromCloud();
       }
     }
   };
+
+  const handleScroll = (e) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.target;
+    if (scrollHeight - scrollTop <= clientHeight + 150) {
+      triggerLoadMore();
+    }
+  };
+
+  useEffect(() => {
+    const handleWindowScroll = () => {
+      if (!isMobile) return;
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const clientHeight = window.innerHeight || document.documentElement.clientHeight;
+      const scrollHeight = document.documentElement.scrollHeight;
+
+      if (scrollHeight - scrollTop <= clientHeight + 180) {
+        triggerLoadMore();
+      }
+    };
+
+    window.addEventListener("scroll", handleWindowScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleWindowScroll);
+  }, [isMobile, loading, localLoadingMore, loadingMoreCloud, visibleCount, filteredFiles.length, hasMoreInCloud]);
 
 
   // Calculate dynamic storage summaries
@@ -1189,26 +1213,48 @@ const Files = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="view-mode-selector">
-            <button 
-              className={`view-btn ${viewMode === "grid" ? "active" : ""}`}
-              onClick={() => setViewMode("grid")}
-              title="Grid View"
-            >
-              Grid
-            </button>
-            <button 
-              className={`view-btn ${viewMode === "list" ? "active" : ""}`}
-              onClick={() => setViewMode("list")}
-              title="List View"
-            >
-              List
-            </button>
+           <div className="view-mode-selector">
+            {isMobile ? (
+              <button 
+                className="view-btn active"
+                onClick={() => setViewMode(viewMode === "list" ? "grid" : "list")}
+                title={viewMode === "list" ? "Grid View" : "List View"}
+              >
+                <span className="mobile-only-icon">{viewMode === "list" ? "📊" : "☰"}</span>
+              </button>
+            ) : (
+              <>
+                <button 
+                  className={`view-btn ${viewMode === "grid" ? "active" : ""}`}
+                  onClick={() => setViewMode("grid")}
+                  title="Grid View"
+                >
+                  <span className="desktop-only-text">Grid</span>
+                  <span className="mobile-only-icon" style={{ display: "none" }}>📊</span>
+                </button>
+                <button 
+                  className={`view-btn ${viewMode === "list" ? "active" : ""}`}
+                  onClick={() => setViewMode("list")}
+                  title="List View"
+                >
+                  <span className="desktop-only-text">List</span>
+                  <span className="mobile-only-icon" style={{ display: "none" }}>☰</span>
+                </button>
+              </>
+            )}
           </div>
+          <button 
+            className="filter-toggle-mobile-btn" 
+            onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
+            style={{ display: "none" }}
+            title="Toggle Filters"
+          >
+            ⚙️
+          </button>
         </div>
 
         {/* HORIZONTAL FILTERS BAR */}
-        <div className="fm-horizontal-filters">
+        <div className={`fm-horizontal-filters ${mobileFiltersOpen ? "mobile-open" : "mobile-closed"}`}>
           <select 
             className="filter-select"
             value={activeCategory}
@@ -1236,7 +1282,27 @@ const Files = () => {
             </select>
           )}
 
-                    <div className="custom-multiselect-container" style={{ position: "relative", display: "inline-block" }}>
+          {/* Mobile Only Native Accounts Select */}
+          <select
+            className="filter-select mobile-accounts-select"
+            value={selectedAccounts.length === 1 ? selectedAccounts[0] : "all"}
+            onChange={(e) => {
+              if (e.target.value === "all") {
+                setSelectedAccounts([]);
+              } else {
+                setSelectedAccounts([e.target.value]);
+              }
+            }}
+          >
+            <option value="all">☁️ All Accounts</option>
+            {accounts.map(acc => (
+              <option key={acc._id} value={acc._id}>
+                {acc.provider === 'google' ? 'Google Drive' : acc.provider === 'dropbox' ? 'Dropbox' : acc.provider === 's3' ? 'Amazon S3' : acc.provider === 'box' ? 'Box' : 'OneDrive'} ({acc.email})
+              </option>
+            ))}
+          </select>
+
+          <div className="custom-multiselect-container" style={{ position: "relative", display: "inline-block" }}>
             <button 
               className="filter-select custom-select-btn"
               onClick={() => setAccountsDropdownOpen(!accountsDropdownOpen)}
@@ -1612,128 +1678,256 @@ const Files = () => {
             <div className="empty-state">No files found matching criteria.</div>
           ) : viewMode === "list" ? (
             /* TABLE VIEW */
-            <div className="fm-table-container" onScroll={handleScroll}>
-              <table className="fm-files-table">
-                <thead>
-                  <tr>
-                                        {isSelectMode && (
-                      <th className="checkbox-col" onClick={toggleSelectAllFiles} style={{ cursor: "pointer" }}>
-                        <div 
-                          className={`custom-card-checkbox ${
-                            filteredFiles.length > 0 && filteredFiles.slice(0, visibleCount).every(f => selectedFileIds.includes(f.id)) 
-                              ? "checked" 
-                              : ""
-                          }`}
-                          style={{ margin: "0 auto" }}
-                        />
-                      </th>
-                    )}
-
-                                         <th className="col-name">Name</th>
-                     <th className="col-account">Account</th>
-                     <th className="col-size">Size</th>
-                     <th className="col-modified">Modified</th>
-                     <th className="col-actions">Actions</th>
-
-                  </tr>
-                </thead>
-                <tbody>
+            isMobile ? (
+              /* NATIVE MOBILE LIST VIEW */
+              <>
+                <div className="mobile-native-file-list" onScroll={handleScroll}>
                   {filteredFiles.slice(0, visibleCount).map((file) => {
                     const fileTypeKey = getFileTypeKey(file);
                     const config = fileTypeConfigs[fileTypeKey];
                     const virtualPath = getFileVirtualPath(file);
                     const isSelected = selectedFileIds.includes(file.id);
+                    const providerLabel = file.provider === 'google' ? 'Google Drive' : file.provider === 'dropbox' ? 'Dropbox' : file.provider === 's3' ? 'Amazon S3' : file.provider === 'box' ? 'Box' : 'OneDrive';
                     
+                    const fileDateStr = file.createdAt || file.updatedAt || file.modifiedTime;
+                    const formattedDate = fileDateStr ? new Date(fileDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+
                     return (
-                      <tr 
+                      <div 
                         key={file.id} 
-                        className={isSelected ? "selected-row" : ""}
-                        onClick={() => isSelectMode && toggleSelectFile(file.id)}
-                        style={{ cursor: isSelectMode ? "pointer" : "default" }}
+                        className={`native-mobile-file-row ${isSelected ? "selected" : ""}`}
+                        onClick={() => isSelectMode ? toggleSelectFile(file.id) : setSelectedMobileFile(file)}
                       >
-                                                                        {isSelectMode && (
-                          <td className="checkbox-cell" onClick={(e) => { e.stopPropagation(); toggleSelectFile(file.id); }}>
-                            <div 
-                              className={`custom-card-checkbox ${isSelected ? "checked" : ""}`}
-                              style={{ margin: "0 auto" }}
-                            />
-                          </td>
+                        {isSelectMode && (
+                          <div 
+                            className={`custom-card-checkbox ${isSelected ? "checked" : ""}`}
+                            onClick={(e) => { e.stopPropagation(); toggleSelectFile(file.id); }}
+                          />
                         )}
+                        
+                        <div className="native-file-icon-box" style={{ background: config.bg }}>
+                          {config.icon}
+                        </div>
 
-                        <td>
-                          <div className="file-name-cell-custom">
-                            <span className="file-type-icon-badge" style={{ background: config.bg }}>
-                              {config.icon}
-                            </span>
-                            <div className="file-meta">
-                              <span className="file-name-title" title={file.name}>{file.name}</span>
-                              <span className="file-virtual-path">{virtualPath}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="file-account-badge">
-                            <img src={providerIcons[file.provider]} alt={file.provider} className="provider-logo-table" />
-                                                                                                                 <span>{file.accountEmail || (file.provider === 'google' ? 'Google Drive' : file.provider === 'dropbox' ? 'Dropbox' : file.provider === 's3' ? 'Amazon S3' : file.provider === 'box' ? 'Box' : 'OneDrive')}</span>
+                        <div className="native-file-info">
+                          <span className="native-file-name" title={file.name}>
+                            {file.name}
+                          </span>
+                          <span className="native-file-subtext">
+                            {providerLabel} • {file.size ? formatSize(file.size) : "-"} {formattedDate ? `• ${formattedDate}` : ""}
+                          </span>
+                        </div>
 
-
-
-                          </div>
-                        </td>
-                        <td className="file-size-cell">{file.size ? formatSize(file.size) : "-"}</td>
-                        <td className="file-modified-cell">
-                          {file.createdAt ? new Date(file.createdAt).toLocaleDateString(undefined, {
-                            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                          }) : "-"}
-                        </td>
-                                                                        <td className="file-actions-cell" onClick={(e) => e.stopPropagation()}>
-                                                     <a 
-                             href={getFileOpenUrl(file)} 
-                             target="_blank" 
- 
-                            rel="noreferrer" 
-                            className="action-btn" 
-                            style={{ 
-                              marginRight: "8px",
-                              padding: "6px 12px",
-                              background: "rgba(255, 255, 255, 0.06)",
-                              border: "1px solid rgba(255, 255, 255, 0.1)",
-                              borderRadius: "var(--radius-md)",
-                              color: "var(--text-primary)",
-                              fontSize: "12.5px",
-                              fontWeight: "500",
-                              textDecoration: "none",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              height: "30px",
-                              transition: "all 0.15s ease"
+                        {!isSelectMode && (
+                          <button 
+                            className="native-more-btn" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedMobileFile(file);
                             }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "rgba(255, 255, 255, 0.12)";
-                              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.2)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "rgba(255, 255, 255, 0.06)";
-                              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
-                            }}
+                            title="File Options"
                           >
-                            Open
-                          </a>
-                                                    <button className="action-icon-btn download" title="Download" onClick={() => handleSingleDownload(file)}>⬇️</button>
-
-                                                    <button className="action-icon-btn share" title="Share File" onClick={() => handleShareFile(file)}>🔗</button>
-
-                        </td>
-
-
-                      </tr>
+                            ⋮
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
-                                     {showSkeletons && [1, 2, 3].map((i) => <SkeletonRow key={`loading-${i}`} />)}
+                  {showSkeletons && [1, 2, 3].map((i) => (
+                    <div key={`skeleton-${i}`} className="native-mobile-file-row skeleton" style={{ opacity: 0.2 }}>
+                      <div className="native-file-icon-box" style={{ background: "rgba(255,255,255,0.1)" }} />
+                      <div className="native-file-info">
+                        <div style={{ height: "14px", width: "60%", background: "rgba(255,255,255,0.2)", borderRadius: "4px" }} />
+                        <div style={{ height: "10px", width: "40%", background: "rgba(255,255,255,0.1)", borderRadius: "4px", marginTop: "4px" }} />
+                      </div>
+                    </div>
+                  ))}
 
-                </tbody>
-              </table>
-            </div>
+                  {/* BOTTOM LOADING SPINNER ANIMATION */}
+                  {(localLoadingMore || loadingMoreCloud) && (
+                    <div className="mobile-bottom-loader">
+                      <div className="mobile-spinner"></div>
+                      <span>Loading more files...</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* NATIVE MOBILE BOTTOM SHEET DRAWER FOR ACTIONS */}
+                {selectedMobileFile && (() => {
+                  const selDateStr = selectedMobileFile.createdAt || selectedMobileFile.updatedAt || selectedMobileFile.modifiedTime;
+                  const selFormattedDate = selDateStr ? new Date(selDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+                  const selProviderLabel = selectedMobileFile.provider === 'google' ? 'Google Drive' : selectedMobileFile.provider === 'dropbox' ? 'Dropbox' : selectedMobileFile.provider === 's3' ? 'Amazon S3' : selectedMobileFile.provider === 'box' ? 'Box' : 'OneDrive';
+
+                  return (
+                    <div className="mobile-sheet-backdrop" onClick={() => setSelectedMobileFile(null)}>
+                      <div className="mobile-sheet-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="mobile-sheet-drag-handle"></div>
+                        
+                        <div className="mobile-sheet-header">
+                          <span className="sheet-icon-badge" style={{ background: fileTypeConfigs[getFileTypeKey(selectedMobileFile)].bg }}>
+                            {fileTypeConfigs[getFileTypeKey(selectedMobileFile)].icon}
+                          </span>
+                          <div className="sheet-file-details">
+                            <h4 className="sheet-file-title">{selectedMobileFile.name}</h4>
+                            <p className="sheet-file-sub">
+                              {selProviderLabel} • {selectedMobileFile.size ? formatSize(selectedMobileFile.size) : "-"} {selFormattedDate ? `• ${selFormattedDate}` : ""}
+                            </p>
+                          </div>
+                        </div>
+
+                      <div className="mobile-sheet-actions">
+                        <a 
+                          href={getFileOpenUrl(selectedMobileFile)} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="sheet-btn primary"
+                          onClick={() => setSelectedMobileFile(null)}
+                        >
+                          <span className="btn-icon">👁️</span> Open / Preview File
+                        </a>
+                        <button 
+                          className="sheet-btn"
+                          onClick={() => {
+                            handleSingleDownload(selectedMobileFile);
+                            setSelectedMobileFile(null);
+                          }}
+                        >
+                          <span className="btn-icon">⬇️</span> Download File
+                        </button>
+                        <button 
+                          className="sheet-btn"
+                          onClick={() => {
+                            handleShareFile(selectedMobileFile);
+                            setSelectedMobileFile(null);
+                          }}
+                        >
+                          <span className="btn-icon">🔗</span> Copy Share Link
+                        </button>
+                        <button 
+                          className="sheet-btn cancel"
+                          onClick={() => setSelectedMobileFile(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+            ) : (
+              /* DESKTOP TABLE VIEW */
+              <div className="fm-table-container" onScroll={handleScroll}>
+                <table className="fm-files-table">
+                  <thead>
+                    <tr>
+                      {isSelectMode && (
+                        <th className="checkbox-col" onClick={toggleSelectAllFiles} style={{ cursor: "pointer" }}>
+                          <div 
+                            className={`custom-card-checkbox ${
+                              filteredFiles.length > 0 && filteredFiles.slice(0, visibleCount).every(f => selectedFileIds.includes(f.id)) 
+                                ? "checked" 
+                                : ""
+                            }`}
+                            style={{ margin: "0 auto" }}
+                          />
+                        </th>
+                      )}
+                      <th className="col-name">Name</th>
+                      <th className="col-account">Account</th>
+                      <th className="col-size">Size</th>
+                      <th className="col-modified">Modified</th>
+                      <th className="col-actions">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredFiles.slice(0, visibleCount).map((file) => {
+                      const fileTypeKey = getFileTypeKey(file);
+                      const config = fileTypeConfigs[fileTypeKey];
+                      const virtualPath = getFileVirtualPath(file);
+                      const isSelected = selectedFileIds.includes(file.id);
+                      
+                      return (
+                        <tr 
+                          key={file.id} 
+                          className={isSelected ? "selected-row" : ""}
+                          onClick={() => isSelectMode && toggleSelectFile(file.id)}
+                          style={{ cursor: isSelectMode ? "pointer" : "default" }}
+                        >
+                          {isSelectMode && (
+                            <td className="checkbox-cell" onClick={(e) => { e.stopPropagation(); toggleSelectFile(file.id); }}>
+                              <div 
+                                className={`custom-card-checkbox ${isSelected ? "checked" : ""}`}
+                                style={{ margin: "0 auto" }}
+                              />
+                            </td>
+                          )}
+                          <td>
+                            <div className="file-name-cell-custom">
+                              <span className="file-type-icon-badge" style={{ background: config.bg }}>
+                                {config.icon}
+                              </span>
+                              <div className="file-meta">
+                                <span className="file-name-title" title={file.name}>{file.name}</span>
+                                <span className="file-virtual-path">{virtualPath}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="file-account-cell">
+                            <div className="file-account-badge">
+                              <img src={providerIcons[file.provider]} alt={file.provider} className="provider-logo-table" />
+                              <span>{file.accountEmail || (file.provider === 'google' ? 'Google Drive' : file.provider === 'dropbox' ? 'Dropbox' : file.provider === 's3' ? 'Amazon S3' : file.provider === 'box' ? 'Box' : 'OneDrive')}</span>
+                            </div>
+                          </td>
+                          <td className="file-size-cell">{file.size ? formatSize(file.size) : "-"}</td>
+                          <td className="file-modified-cell">
+                            {file.createdAt ? new Date(file.createdAt).toLocaleDateString(undefined, {
+                              year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            }) : "-"}
+                          </td>
+                          <td className="file-actions-cell" onClick={(e) => e.stopPropagation()}>
+                            <a 
+                              href={getFileOpenUrl(file)} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="action-btn" 
+                              style={{ 
+                                marginRight: "8px",
+                                padding: "6px 12px",
+                                background: "rgba(255, 255, 255, 0.06)",
+                                border: "1px solid rgba(255, 255, 255, 0.1)",
+                                borderRadius: "var(--radius-md)",
+                                color: "var(--text-primary)",
+                                fontSize: "12.5px",
+                                fontWeight: "500",
+                                textDecoration: "none",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                height: "30px",
+                                transition: "all 0.15s ease"
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "rgba(255, 255, 255, 0.12)";
+                                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.2)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = "rgba(255, 255, 255, 0.06)";
+                                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
+                              }}
+                            >
+                              Open
+                            </a>
+                            <button className="action-icon-btn download" title="Download" onClick={() => handleSingleDownload(file)}>⬇️</button>
+                            <button className="action-icon-btn share" title="Share File" onClick={() => handleShareFile(file)}>🔗</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {showSkeletons && [1, 2, 3].map((i) => <SkeletonRow key={`loading-${i}`} />)}
+                  </tbody>
+                </table>
+              </div>
+            )
           ) : (
             /* GRID VIEW */
             <div className="fm-grid-container" onScroll={handleScroll}>

@@ -355,7 +355,6 @@
   opacity: 1;
 }
 
-/* Responsive queries */
 @media (max-width: 900px) {
   .optimize-stats-row {
     grid-template-columns: 1fr;
@@ -364,5 +363,63 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .optimize-page {
+    padding: 1.5rem 1rem !important;
+  }
+
+  .dup-group {
+    padding: 1.2rem 1rem !important;
+  }
+
+  /* Duplicate file card stacked vertically */
+  .dup-file-item {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 12px !important;
+  }
+
+  .dup-file-info {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+
+  .dup-file-info > div,
+  .dup-file-info span {
+    width: 100% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .dup-file-item .btn-danger-sm {
+    width: 100% !important;
+    text-align: center !important;
+    padding: 8px !important;
+  }
+
+  /* Large files table responsive column hider */
+  .optimize-table th:nth-child(3),
+  .optimize-table td.file-account-cell,
+  .optimize-table th:nth-child(4),
+  .optimize-table td.file-folder-cell,
+  .optimize-table th:nth-child(5),
+  .optimize-table td:nth-child(5) {
+    display: none !important;
+  }
+
+  .optimize-table th, .optimize-table td {
+    padding: 8px !important;
+    font-size: 13px !important;
+  }
+
+  .file-name-cell {
+    max-width: 140px !important;
   }
 }

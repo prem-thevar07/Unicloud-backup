@@ -823,3 +823,13 @@ input:checked+.slider:before {
 .custom-dropdown-subitem.selected .custom-dropdown-checkbox::after {
   display: block;
 }
+
+/* ==========================================================================
+   MOBILE GALLERY RESPONSIVE OVERRIDES
+   ========================================================================== */
+@media (max-width: 576px) {
+  .photos-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+}

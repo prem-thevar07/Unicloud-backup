@@ -317,4 +317,25 @@
   .username {
     display: none;
   }
+
+  .profile-btn {
+    padding: 4px !important;
+    gap: 0 !important;
+    border-radius: 50% !important;
+    width: 40px !important;
+    height: 40px !important;
+    justify-content: center !important;
+  }
+
+  .profile-btn .chevron {
+    display: none !important;
+  }
+
+  .logo-text {
+    font-size: 18px !important;
+  }
+
+  .logo img {
+    height: 24px !important;
+  }
 }

@@ -847,3 +847,29 @@
   cursor: not-allowed;
 }
 
+/* ==========================================================================
+   MOBILE PROFILE RESPONSIVE OVERRIDES
+   ========================================================================== */
+@media (max-width: 576px) {
+  .profile-page {
+    padding: 20px 12px !important;
+  }
+
+  .profile-glass-card {
+    padding: 20px 16px !important;
+    border-radius: 16px !important;
+  }
+
+  .profile-danger-btn,
+  .profile-modal-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+
+  .delete-modal-actions {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+}
+

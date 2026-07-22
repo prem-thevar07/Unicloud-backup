@@ -849,17 +849,270 @@
 }
 
 @media (max-width: 768px) {
+  /* 1. Main Page Flex Box Re-ordering for Mobile */
   .dashboard-page {
-    padding: 1.5rem;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 12px 10px !important;
+    gap: 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
   }
 
+  /* Hero title block - Compact */
   .dashboard-hero-title {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
+    order: 1 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    margin-bottom: 0 !important;
+    padding: 2px 2px !important;
   }
 
-  .dashboard-right-column {
-    flex-direction: column;
+  .dashboard-hero-title h1 {
+    font-size: 1.35rem !important;
+    margin-bottom: 0 !important;
+  }
+
+  .hero-subtitle {
+    display: none !important; /* Hide long subtitle on mobile to save space */
+  }
+
+  .current-date-badge {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    border-radius: 8px !important;
+  }
+
+  /* 2. Top Metric Cards Row - Order 2, compact 3-column grid */
+  .metric-cards-row {
+    order: 2 !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .metric-card {
+    padding: 10px 8px !important;
+    gap: 6px !important;
+    height: auto !important;
+    min-height: 85px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    border-radius: 12px !important;
+  }
+
+  .metric-card-decoration {
+    display: none !important; /* Hide background decorative graphics on mobile */
+  }
+
+  .donut-chart-container {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  .donut-percentage {
+    font-size: 9.5px !important;
+  }
+
+  .metric-title-group {
+    margin-bottom: 2px !important;
+    gap: 4px !important;
+  }
+
+  .metric-icon {
+    font-size: 11px !important;
+  }
+
+  .metric-label {
+    font-size: 9px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .metric-value {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    margin-top: 2px !important;
+  }
+
+  .metric-limit {
+    font-size: 9px !important;
+    margin-bottom: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .metric-pill {
+    display: none !important;
+  }
+
+  /* 3. Bottom Grid (Recent Files & Insights) - Order 3 (MOVED UP) */
+  .dashboard-bottom-grid {
+    order: 3 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .recent-files-list-card {
+    order: 1 !important; /* Recent Files comes first! */
+    padding: 12px !important;
+    border-radius: 14px !important;
+  }
+
+  .recent-files-list-card .card-header {
+    margin-bottom: 8px !important;
+  }
+
+  .recent-files-list-card .card-header h3 {
+    font-size: 15px !important;
+  }
+
+  .recent-files-horizontal-row {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 10px !important;
+    padding-bottom: 6px !important;
+    margin-bottom: 0 !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .recent-files-horizontal-row::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .recent-file-card {
+    flex: 0 0 135px !important;
+    max-width: 135px !important;
+    padding: 8px 10px !important;
+    border-radius: 10px !important;
+  }
+
+  .recent-card-top {
+    margin-bottom: 6px !important;
+  }
+
+  .recent-card-body h4 {
+    font-size: 12px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .recent-card-provider {
+    font-size: 10px !important;
+  }
+
+  .recent-card-meta {
+    font-size: 9.5px !important;
+  }
+
+  /* Storage Insights */
+  .insights-card {
+    order: 2 !important;
+    padding: 12px !important;
+    border-radius: 14px !important;
+  }
+
+  .insights-card .card-header h3 {
+    font-size: 15px !important;
+  }
+
+  .insights-message {
+    gap: 8px !important;
+    padding: 8px 10px !important;
+  }
+
+  .insights-msg-icon {
+    font-size: 18px !important;
+  }
+
+  .insights-msg-text strong {
+    font-size: 12.5px !important;
+  }
+
+  .insights-msg-text p {
+    font-size: 11px !important;
+    margin-top: 2px !important;
+  }
+
+  /* 4. Middle Grid (Storage Breakdown & Activity) - Order 4 */
+  .dashboard-middle-grid {
+    order: 4 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .storage-breakdown-card {
+    padding: 12px !important;
+    border-radius: 14px !important;
+  }
+
+  .card-header-breakdown {
+    margin-bottom: 8px !important;
+  }
+
+  .card-header-breakdown h3 {
+    font-size: 15px !important;
+  }
+
+  .card-subtitle {
+    display: none !important;
+  }
+
+  .breakdown-row {
+    padding: 8px 6px !important;
+    gap: 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .provider-logo {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .provider-name {
+    font-size: 12px !important;
+  }
+
+  .provider-sizes {
+    font-size: 11px !important;
+  }
+
+  .recent-activity-card {
+    padding: 12px !important;
+    border-radius: 14px !important;
+  }
+
+  .recent-activity-card .card-header h3 {
+    font-size: 15px !important;
+  }
+
+  .timeline-item {
+    padding: 6px 0 !important;
+    gap: 10px !important;
+  }
+
+  .timeline-icon-container {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 12px !important;
+  }
+
+  .timeline-details p {
+    font-size: 11.5px !important;
+  }
+
+  .timeline-time {
+    font-size: 10px !important;
   }
 }

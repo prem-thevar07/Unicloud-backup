@@ -372,7 +372,7 @@ const Profile = () => {
           {/* LEFT COLUMN: Summary & Settings */}
           <div className="profile-column">
             {/* HERO PROFILE PICTURE & STORAGE */}
-            <div className="profile-glass-card">
+            <div className="profile-glass-card profile-card-hero">
               <div className="profile-avatar-center-wrapper">
                 <div 
                   className="profile-avatar-interactive" 
@@ -492,7 +492,7 @@ const Profile = () => {
             </div>
 
             {/* ACCOUNT PREFERENCES */}
-            <div className="profile-glass-card">
+            <div className="profile-glass-card profile-card-preferences">
               <h3>Account Preferences</h3>
               
               <div className="profile-form-group">
@@ -545,7 +545,7 @@ const Profile = () => {
             </div>
 
             {/* DANGER ZONE (ACCOUNT DELETION) */}
-            <div className="profile-glass-card profile-danger-zone" style={{ position: "relative" }}>
+            <div className="profile-glass-card profile-danger-zone profile-card-danger" style={{ position: "relative" }}>
               <h3 className="profile-danger-title">⚠️ Danger Zone</h3>
               <p className="profile-danger-desc">
                 Permanently delete your Unicloud account and remove all connected cloud services, synced storage limits, and activity logs.
@@ -567,7 +567,7 @@ const Profile = () => {
           {/* RIGHT COLUMN: Password & Connections */}
           <div className="profile-column">
             {/* CLOUD CONNECTIONS DESK */}
-            <div className="profile-glass-card">
+            <div className="profile-glass-card profile-card-connections">
               <h3>Cloud Connections Desk</h3>
               <div className="profile-accounts-container">
                 {connectionsCount === 0 ? (
@@ -649,7 +649,7 @@ const Profile = () => {
             </div>
 
             {/* SECURITY CREDENTIALS (PASSWORD) */}
-            <div className="profile-glass-card">
+            <div className="profile-glass-card profile-card-security">
               <h3>Security & Credentials</h3>
               
               <div className="profile-form-group">

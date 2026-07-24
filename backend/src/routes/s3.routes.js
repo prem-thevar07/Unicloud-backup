@@ -134,7 +134,9 @@ router.get("/download/:id", auth, async (req, res) => {
       },
     });
 
-    const ext = fileId.split(".").pop().toLowerCase();
+    let targetKey = fileId;
+
+    const ext = targetKey.split(".").pop().toLowerCase();
     const mimeMap = {
       jpg: "image/jpeg",
       jpeg: "image/jpeg",
@@ -150,15 +152,19 @@ router.get("/download/:id", auth, async (req, res) => {
     };
     const contentType = mimeMap[ext] || "application/octet-stream";
 
+    const rawFilename = targetKey.split("/").pop() || "download";
+    // Sanitize filename for Content-Disposition so '=' and quotes do not corrupt AWS S3 presigned URL query string
+    const safeFilename = rawFilename.replace(/=/g, "_").replace(/["\r\n]/g, "");
+
     const isAjax = req.headers.authorization;
     const commandParams = {
       Bucket: bucket,
-      Key: fileId,
+      Key: targetKey,
     };
 
     if (isAjax) {
       // Force download for AJAX request (download button)
-      commandParams.ResponseContentDisposition = `attachment; filename="${fileId.split("/").pop()}"`;
+      commandParams.ResponseContentDisposition = `attachment; filename="${safeFilename}"`;
     } else {
       // Inline rendering inside browser tab (open button)
       commandParams.ResponseContentDisposition = "inline";

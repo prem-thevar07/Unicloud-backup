@@ -177,12 +177,115 @@ router.get("/download/:id", auth, async (req, res) => {
       return res.status(404).json({ message: "Account not found" });
     }
 
-    // Return secure download link in JSON for frontend iframe trigger
+    // Return secure download link in JSON for frontend trigger
     const downloadUrl = `https://api.box.com/2.0/files/${fileId}/content?access_token=${account.accessToken}`;
     res.json({ link: downloadUrl });
   } catch (err) {
     console.error("❌ Box download link error:", err.message);
     res.status(500).json({ message: "Failed to retrieve Box link" });
+  }
+});
+
+/* ===============================
+   📂 BOX OPEN / PREVIEW STREAM
+=============================== */
+router.get("/open/:id", auth, async (req, res) => {
+  try {
+    const accountId = req.params.id;
+    const { fileId } = req.query;
+
+    if (!fileId) {
+      return res.status(400).json({ message: "File ID is required" });
+    }
+
+    const account = await CloudAccount.findOne({
+      _id: accountId,
+      userId: req.user.id,
+      provider: "box",
+    });
+
+    if (!account) {
+      return res.status(404).json({ message: "Account not found" });
+    }
+
+    // 1. Fetch file metadata (name, extension, expiring_embed_link)
+    let fileInfoRes;
+    try {
+      fileInfoRes = await axios.get(`https://api.box.com/2.0/files/${fileId}?fields=id,name,extension,expiring_embed_link`, {
+        headers: { Authorization: `Bearer ${account.accessToken}` }
+      });
+    } catch (err) {
+      if (err.response?.status === 401 && account.refreshToken) {
+        const { refreshBoxToken } = await import("../services/providers/box.provider.js");
+        account.accessToken = await refreshBoxToken(account);
+        fileInfoRes = await axios.get(`https://api.box.com/2.0/files/${fileId}?fields=id,name,extension,expiring_embed_link`, {
+          headers: { Authorization: `Bearer ${account.accessToken}` }
+        });
+      } else {
+        throw err;
+      }
+    }
+
+    const name = fileInfoRes.data?.name || "file";
+    const ext = (fileInfoRes.data?.extension || name.split(".").pop()).toLowerCase();
+    const embedUrl = fileInfoRes.data?.expiring_embed_link?.url;
+
+    const officeExts = ["doc", "docx", "xls", "xlsx", "ppt", "pptx"];
+
+    // 1. For Office documents: Use Box expiring embed viewer or web URL
+    if (officeExts.includes(ext) && embedUrl) {
+      return res.redirect(embedUrl);
+    }
+
+    const mimeMap = {
+      jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+      pdf: "application/pdf", txt: "text/plain", json: "application/json", js: "text/javascript", html: "text/html",
+      mp3: "audio/mpeg", wav: "audio/wav", mp4: "video/mp4", webm: "video/webm"
+    };
+    const mime = mimeMap[ext] || "application/octet-stream";
+
+    const isDirectInline = 
+      mime.startsWith("image/") || 
+      mime.startsWith("video/") || 
+      mime.startsWith("audio/") || 
+      ext === "pdf" || ext === "txt";
+
+    if (isDirectInline) {
+      try {
+        const streamRes = await axios.get(`https://api.box.com/2.0/files/${fileId}/content`, {
+          headers: { Authorization: `Bearer ${account.accessToken}` },
+          responseType: "stream"
+        });
+
+        res.setHeader("Content-Type", ext === "pdf" ? "application/pdf" : mime);
+        res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(name)}"`);
+        return streamRes.data.pipe(res);
+      } catch (streamErr) {
+        console.warn("Box direct stream error, falling back to embed url:", streamErr.message);
+      }
+    }
+
+    // 2. If embed link available, redirect to expiring_embed_link
+    if (embedUrl) {
+      return res.redirect(embedUrl);
+    }
+
+    // 3. Final fallback: Stream file content directly as inline text/binary stream
+    try {
+      const streamRes = await axios.get(`https://api.box.com/2.0/files/${fileId}/content`, {
+        headers: { Authorization: `Bearer ${account.accessToken}` },
+        responseType: "stream"
+      });
+
+      res.setHeader("Content-Type", mime || "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(name)}"`);
+      return streamRes.data.pipe(res);
+    } catch (fallbackErr) {
+      return res.status(404).json({ message: "Box file preview not available" });
+    }
+  } catch (err) {
+    console.error("❌ Box open link error:", err.message);
+    res.status(500).json({ message: "Failed to open Box file" });
   }
 });
 

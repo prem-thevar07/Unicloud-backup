@@ -211,6 +211,8 @@
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .profile-input-wrapper input {
@@ -221,6 +223,10 @@
   border-radius: 12px;
   color: #f3f4f6;
   font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  box-sizing: border-box;
   transition: all 0.2s ease;
 }
 
@@ -246,6 +252,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 
 .profile-eye-toggle {
@@ -268,7 +275,7 @@
 }
 
 .profile-input-wrapper.has-icon input {
-  padding-right: 44px;
+  padding-right: 48px !important;
 }
 
 /* Action Buttons */
@@ -848,22 +855,177 @@
 }
 
 /* ==========================================================================
-   MOBILE PROFILE RESPONSIVE OVERRIDES
+   MOBILE PROFILE RESPONSIVE OVERRIDES (PERFECT PHONE VIEW REDESIGN)
    ========================================================================== */
-@media (max-width: 576px) {
+@media (max-width: 1024px) {
   .profile-page {
-    padding: 20px 12px !important;
+    padding: 12px 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  .profile-header-section {
+    margin-bottom: 12px !important;
+    text-align: left !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .profile-header-section h1 {
+    font-size: 1.4rem !important;
+    margin-bottom: 2px !important;
+  }
+
+  .profile-header-section p {
+    display: none !important; /* Hide long subtitle on phone view */
+  }
+
+  /* Single Column Full-Width Container */
+  .profile-layout-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .profile-column {
+    display: contents !important; /* Flatten column wrappers so card ordering works */
   }
 
   .profile-glass-card {
-    padding: 20px 16px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    padding: 16px 14px !important;
     border-radius: 16px !important;
   }
 
-  .profile-danger-btn,
-  .profile-modal-btn {
+  /* Card Mobile Ordering */
+  .profile-card-hero {
+    order: 1 !important;
+  }
+
+  .profile-card-preferences {
+    order: 2 !important; /* Edit Name & Email */
+  }
+
+  .profile-card-security {
+    order: 3 !important; /* Change Password */
+  }
+
+  .profile-card-connections {
+    order: 4 !important; /* Cloud Connections */
+  }
+
+  /* DANGER ZONE AT THE VERY BOTTOM OF THE MOBILE PAGE */
+  .profile-card-danger {
+    order: 5 !important; /* Moved to very bottom */
+    margin-top: 4px !important;
+    background: rgba(239, 68, 68, 0.04) !important;
+    border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  }
+
+  .profile-danger-title {
+    font-size: 15px !important;
+    color: #ef4444 !important;
+  }
+
+  .profile-danger-desc {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    margin-bottom: 12px !important;
+  }
+
+  .profile-danger-btn {
     width: 100% !important;
+    height: 42px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    border-radius: 10px !important;
     justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Form Controls & Inputs - 100% Width */
+  .profile-form-group {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-bottom: 12px !important;
+  }
+
+  .profile-form-group label {
+    font-size: 11.5px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .profile-input-wrapper {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .profile-input-wrapper input {
+    width: 100% !important;
+    height: 42px !important;
+    font-size: 13px !important;
+    padding: 0 12px !important;
+    border-radius: 10px !important;
+    box-sizing: border-box !important;
+  }
+
+  .profile-input-wrapper.has-icon input {
+    padding-right: 46px !important;
+  }
+
+  .profile-btn-primary {
+    width: 100% !important;
+    height: 42px !important;
+    font-size: 13px !important;
+    border-radius: 10px !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    margin-top: 6px !important;
+  }
+
+  .profile-btn-row {
+    width: 100% !important;
+    display: flex !important;
+    gap: 8px !important;
+    margin-top: 12px !important;
+  }
+
+  .profile-btn-row button {
+    flex: 1 !important;
+    height: 42px !important;
+    font-size: 13px !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+
+  .profile-avatar-center-wrapper {
+    margin-bottom: 14px !important;
+  }
+
+  .profile-avatar-interactive {
+    width: 90px !important;
+    height: 90px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .profile-avatar-center-wrapper h4 {
+    font-size: 18px !important;
+  }
+
+  .profile-account-row {
+    padding: 10px 12px !important;
+    border-radius: 10px !important;
+    width: 100% !important;
     box-sizing: border-box !important;
   }
 

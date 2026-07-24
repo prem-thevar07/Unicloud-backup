@@ -635,6 +635,34 @@
   white-space: nowrap;
 }
 
+.col-actions {
+  width: 250px !important;
+}
+
+.action-btn.cloud-official-btn {
+  background: rgba(99, 102, 241, 0.12) !important;
+  border: 1px solid rgba(99, 102, 241, 0.25) !important;
+  color: #a5b4fc !important;
+  margin-right: 6px !important;
+  padding: 6px 10px !important;
+  border-radius: var(--radius-md) !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  height: 30px !important;
+  transition: all 0.15s ease !important;
+  box-sizing: border-box !important;
+}
+
+.action-btn.cloud-official-btn:hover {
+  background: rgba(99, 102, 241, 0.22) !important;
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  color: #ffffff !important;
+}
+
 .action-icon-btn {
   background: transparent;
   border: none;
@@ -1459,6 +1487,62 @@
   }
 
   /* 5. NATIVE MOBILE LIST VIEW & ACTION SHEET STYLES */
+  .section-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-bottom: 8px !important;
+  }
+
+  .mobile-section-header-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .mobile-header-btn {
+    padding: 5px 12px !important;
+    height: 32px !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    transition: all 0.15s ease !important;
+    box-sizing: border-box !important;
+    background: rgba(99, 102, 241, 0.12) !important;
+    border: 1px solid rgba(99, 102, 241, 0.25) !important;
+    color: #a5b4fc !important;
+  }
+
+  .mobile-header-btn:hover {
+    background: rgba(99, 102, 241, 0.2) !important;
+    border-color: rgba(99, 102, 241, 0.35) !important;
+  }
+
+  .mobile-header-btn.select-btn {
+    background: rgba(99, 102, 241, 0.12) !important;
+    border: 1px solid rgba(99, 102, 241, 0.25) !important;
+    color: #a5b4fc !important;
+  }
+
+  .mobile-header-btn.select-btn.active {
+    background: rgba(99, 102, 241, 0.3) !important;
+    border-color: rgba(99, 102, 241, 0.5) !important;
+    color: #ffffff !important;
+  }
+
+  .mobile-header-btn.reset-btn {
+    background: rgba(99, 102, 241, 0.12) !important;
+    border: 1px solid rgba(99, 102, 241, 0.25) !important;
+    color: #a5b4fc !important;
+  }
+
   .mobile-native-file-list {
     display: flex !important;
     flex-direction: column !important;
@@ -1522,12 +1606,40 @@
   }
 
   .native-file-subtext {
-    font-size: 12px !important;
-    color: rgba(255, 255, 255, 0.45) !important;
+    font-size: 11.5px !important;
+    color: rgba(255, 255, 255, 0.5) !important;
     white-space: nowrap !important;
     overflow: hidden !important;
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .mobile-subtext-provider-logo {
+    width: 14px !important;
+    height: 14px !important;
+    object-fit: contain !important;
+    flex-shrink: 0 !important;
+    display: inline-block !important;
+    margin-right: 3px !important;
+  }
+
+  .subtext-account {
+    overflow: hidden !important;
     text-overflow: ellipsis !important;
-    display: block !important;
+    white-space: nowrap !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 125px !important;
+    display: inline-block !important;
+  }
+
+  .subtext-date,
+  .subtext-size {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    display: inline-block !important;
   }
 
   .native-more-btn {

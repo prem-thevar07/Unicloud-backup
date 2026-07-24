@@ -19,7 +19,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 140px 20px 120px;
+  padding: 60px 20px 40px;
   text-align: center;
 }
 
@@ -29,8 +29,8 @@
 
 .hero-badge {
   display: inline-block;
-  margin-bottom: 16px;
-  padding: 6px 14px;
+  margin-bottom: 12px;
+  padding: 5px 14px;
   font-size: 0.8rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -41,17 +41,17 @@
 }
 
 .hero h1 {
-  font-size: clamp(2.6rem, 5vw, 3.6rem);
+  font-size: clamp(2.2rem, 4.5vw, 3.4rem);
   font-weight: 700;
   line-height: 1.15;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .hero p {
-  font-size: 1.05rem;
+  font-size: 1rem;
   color: #b6b6d9;
   max-width: 650px;
-  margin: 0 auto 36px;
+  margin: 0 auto 24px;
 }
 
 /* ===============================
@@ -67,8 +67,8 @@
 .btn-primary {
   background: linear-gradient(135deg, #7a6cff, #9b8cff);
   color: #ffffff;
-  padding: 12px 26px;
-  font-size: 0.95rem;
+  padding: 10px 24px;
+  font-size: 0.92rem;
   font-weight: 600;
   border: none;
   border-radius: 999px;
@@ -82,8 +82,8 @@
 }
 
 .btn-secondary {
-  padding: 12px 26px;
-  font-size: 0.95rem;
+  padding: 10px 24px;
+  font-size: 0.92rem;
   color: #d6d6ff;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -103,45 +103,45 @@
 .integrations-section {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 80px 20px;
+  padding: 40px 20px;
 }
 
 .section-header-centered {
   text-align: center;
   max-width: 700px;
-  margin: 0 auto 52px;
+  margin: 0 auto 28px;
 }
 
 .section-header-centered .subtitle {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--accent-secondary);
   text-transform: uppercase;
   display: block;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .section-header-centered h2 {
-  font-size: 2.2rem;
-  margin-bottom: 16px;
+  font-size: 2rem;
+  margin-bottom: 10px;
   font-family: var(--font-heading);
 }
 
 .section-header-centered p {
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   color: #b6b6d9;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .integrations-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
+  gap: 16px;
 }
 
 .integration-card {
-  padding: 32px 24px;
+  padding: 24px 20px;
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -160,9 +160,9 @@
 }
 
 .provider-card-icon {
-  font-size: 36px;
+  font-size: 32px;
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   transition: transform 0.3s ease;
 }
 
@@ -171,15 +171,15 @@
 }
 
 .integration-card h3 {
-  font-size: 1.15rem;
-  margin-bottom: 10px;
+  font-size: 1.1rem;
+  margin-bottom: 8px;
   color: var(--text-primary);
 }
 
 .integration-card p {
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   color: #b6b6d9;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 /* ===============================
@@ -188,7 +188,7 @@
 .features-showcase {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 80px 20px;
+  padding: 40px 20px;
 }
 
 /* ===============================
@@ -197,15 +197,15 @@
 .workflow-section {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 28px;
+  gap: 18px;
   max-width: 1000px;
   margin: 0 auto;
-  padding: 80px 20px;
+  padding: 20px 20px 40px;
 }
 
 .workflow-step {
-  padding: 28px;
-  border-radius: 18px;
+  padding: 22px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px);
@@ -218,13 +218,13 @@
 }
 
 .step-icon {
-  font-size: 32px;
-  margin-bottom: 12px;
+  font-size: 28px;
+  margin-bottom: 8px;
   display: block;
 }
 
 .workflow-step span {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: #9b8cff;
   letter-spacing: 0.1em;
@@ -232,28 +232,28 @@
 }
 
 .workflow-step h3 {
-  margin: 10px 0 8px;
-  font-size: 1.2rem;
+  margin: 6px 0 6px;
+  font-size: 1.1rem;
 }
 
 .workflow-step p {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: #b6b6d9;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 /* ===============================
    CTA SECTION
 ================================ */
 .cta-section {
-  padding: 120px 20px;
+  padding: 50px 20px;
 }
 
 .cta-box {
   max-width: 900px;
   margin: 0 auto;
-  padding: 48px;
-  border-radius: 24px;
+  padding: 36px 28px;
+  border-radius: 20px;
   background: linear-gradient(
     145deg,
     rgba(120, 90, 255, 0.18),
@@ -265,25 +265,86 @@
 }
 
 .cta-box h3 {
-  font-size: 2rem;
-  margin-bottom: 14px;
+  font-size: 1.75rem;
+  margin-bottom: 10px;
 }
 
 .cta-box p {
   color: #c7c7f7;
   max-width: 600px;
-  margin: 0 auto 28px;
+  margin: 0 auto 20px;
+  font-size: 0.95rem;
 }
 
 /* ===============================
-   RESPONSIVE
+   RESPONSIVE (MOBILE OPTIMIZATIONS)
 ================================ */
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .hero {
-    padding-top: 120px;
+    padding: 30px 16px 20px !important;
+  }
+
+  .hero h1 {
+    font-size: 1.9rem !important;
+    margin-bottom: 10px !important;
+  }
+
+  .hero p {
+    font-size: 0.92rem !important;
+    margin-bottom: 18px !important;
+  }
+
+  .hero-badge {
+    margin-bottom: 10px !important;
+    font-size: 0.75rem !important;
+    padding: 4px 10px !important;
+  }
+
+  .integrations-section {
+    padding: 24px 14px !important;
+  }
+
+  .section-header-centered {
+    margin-bottom: 18px !important;
+  }
+
+  .section-header-centered h2 {
+    font-size: 1.5rem !important;
+    margin-bottom: 6px !important;
+  }
+
+  .section-header-centered p {
+    font-size: 0.9rem !important;
+  }
+
+  .features-showcase {
+    padding: 24px 14px !important;
+  }
+
+  .workflow-section {
+    padding: 10px 14px 24px !important;
+    gap: 14px !important;
+  }
+
+  .workflow-step {
+    padding: 16px !important;
+  }
+
+  .cta-section {
+    padding: 24px 14px !important;
   }
 
   .cta-box {
-    padding: 36px 24px;
+    padding: 24px 16px !important;
+  }
+
+  .cta-box h3 {
+    font-size: 1.4rem !important;
+    margin-bottom: 8px !important;
+  }
+
+  .cta-box p {
+    font-size: 0.88rem !important;
+    margin-bottom: 16px !important;
   }
 }

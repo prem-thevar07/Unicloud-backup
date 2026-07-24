@@ -21,7 +21,7 @@ export const getFiles = async ({
     if (type) params.append("type", type);
     if (search) params.append("search", search);
     if (mode) params.append("mode", mode); // 🔥 NEW
-    if (pageTokens) params.append("pageTokens", JSON.stringify(pageTokens));
+    if (pageTokens) params.append("pageTokens", typeof pageTokens === "string" ? pageTokens : JSON.stringify(pageTokens));
     if (startDate) params.append("startDate", startDate);
     if (endDate) params.append("endDate", endDate);
     if (folderId) params.append("folderId", folderId);

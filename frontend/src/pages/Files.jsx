@@ -12,9 +12,19 @@ import { logActivity } from "../utils/activityLogger";
 const providerIcons = {
   google: "/assets/drive.png",
   onedrive: "/assets/onedrive.png",
-    dropbox: "/assets/dropbox.png",
+  dropbox: "/assets/dropbox.png",
   s3: "/assets/s3.png",
   box: "/assets/box.png",
+};
+
+const formatDateShort = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(-2);
+  return `${day}/${month}/${year}`;
 };
 
 
@@ -687,117 +697,110 @@ const Files = () => {
   const selectedCount = selectedFiles.length;
   const selectedTotalSize = selectedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
 
-          const triggerDownload = (url) => {
-    const iframe = document.createElement("iframe");
-    iframe.style.display = "none";
-    iframe.src = url;
-    document.body.appendChild(iframe);
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-    }, 15000);
+  const triggerDownload = async (url, fileName) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      if (fileName) a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      return true;
+    } catch (err) {
+      console.warn("Direct blob fetch download fallback for:", url, err);
+      const a = document.createElement("a");
+      a.href = url;
+      if (fileName) a.download = fileName;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return true;
+    }
   };
 
-      const handleSingleDownload = async (file) => {
+  const handleSingleDownload = async (file) => {
     try {
+      let downloadUrl = null;
       if (file.provider === "dropbox") {
         const res = await api.get(`/dropbox/download/${file.accountId}?path=${encodeURIComponent(file.id)}`);
-        if (res.data?.link) {
-          triggerDownload(res.data.link);
-          logActivity(`Downloaded file <strong>${file.name}</strong> from Dropbox`, "📥", "green");
-        } else {
-          alert("Failed to generate download link");
-        }
+        downloadUrl = res.data?.link;
       } else if (file.provider === "google") {
         const token = localStorage.getItem("token");
-        const downloadUrl = `${getCleanApiUrl(`/api/google/download/${file.accountId}?fileId=${file.id}`)}&token=${encodeURIComponent(token)}`;
-        triggerDownload(downloadUrl);
-        logActivity(`Downloaded file <strong>${file.name}</strong> from Google Drive`, "📥", "green");
+        downloadUrl = `${getCleanApiUrl(`/api/google/download/${file.accountId}?fileId=${file.id}`)}&token=${encodeURIComponent(token)}`;
       } else if (file.provider === "onedrive") {
         const res = await api.get(`/onedrive/download/${file.accountId}?fileId=${file.id}`);
-        if (res.data?.link) {
-          triggerDownload(res.data.link);
-          logActivity(`Downloaded file <strong>${file.name}</strong> from OneDrive`, "📥", "green");
-        } else {
-          alert("Failed to generate download link");
-        }
+        downloadUrl = res.data?.link;
       } else if (file.provider === "s3") {
-        const res = await api.get(`/s3/download/${file.accountId}?fileId=${file.id}`);
-        if (res.data?.link) {
-          triggerDownload(res.data.link);
-          logActivity(`Downloaded file <strong>${file.name}</strong> from Amazon S3`, "📥", "green");
-        } else {
-          alert("Failed to generate download link");
-        }
+        const res = await api.get(`/s3/download/${file.accountId}?fileId=${encodeURIComponent(file.id)}`);
+        downloadUrl = res.data?.link;
       } else if (file.provider === "box") {
         const res = await api.get(`/box/download/${file.accountId}?fileId=${file.id}`);
-        if (res.data?.link) {
-          triggerDownload(res.data.link);
-          logActivity(`Downloaded file <strong>${file.name}</strong> from Box`, "📥", "green");
-        } else {
-          alert("Failed to generate download link");
-        }
+        downloadUrl = res.data?.link;
       } else {
-        const dlink = file.webContentLink || file.url;
-        if (dlink) {
-          triggerDownload(dlink);
-          logActivity(`Downloaded file <strong>${file.name}</strong> from Cloud Storage`, "📥", "green");
-        } else {
-          alert("Download link not available");
-        }
+        downloadUrl = file.webContentLink || file.url;
+      }
+
+      if (downloadUrl) {
+        await triggerDownload(downloadUrl, file.name);
+        logActivity(`Downloaded file <strong>${file.name}</strong>`, "📥", "green");
+      } else {
+        alert("Failed to generate download link");
       }
     } catch (err) {
-      console.error(err);
+      console.error("Single download error:", err);
       alert("Failed to download file");
     }
   };
 
-  // Bulk Actions
-  const handleBulkDownload = () => {
-    selectedFiles.forEach((f, index) => {
-      // Tiny staggered delay to prevent network connection flooding, but execution contexts are separate iframes!
-      setTimeout(async () => {
-        try {
-          if (f.provider === "dropbox") {
-            const res = await api.get(`/dropbox/download/${f.accountId}?path=${encodeURIComponent(f.id)}`);
-            if (res.data?.link) {
-              triggerDownload(res.data.link);
-              logActivity(`Downloaded file <strong>${f.name}</strong> from Dropbox`, "📥", "green");
-            }
-          } else if (f.provider === "google") {
-            const token = localStorage.getItem("token");
-            const downloadUrl = `${getCleanApiUrl(`/api/google/download/${f.accountId}?fileId=${f.id}`)}&token=${encodeURIComponent(token)}`;
-            triggerDownload(downloadUrl);
-            logActivity(`Downloaded file <strong>${f.name}</strong> from Google Drive`, "📥", "green");
-          } else if (f.provider === "onedrive") {
-            const res = await api.get(`/onedrive/download/${f.accountId}?fileId=${f.id}`);
-            if (res.data?.link) {
-              triggerDownload(res.data.link);
-              logActivity(`Downloaded file <strong>${f.name}</strong> from OneDrive`, "📥", "green");
-            }
-          } else if (f.provider === "s3") {
-            const res = await api.get(`/s3/download/${f.accountId}?fileId=${f.id}`);
-            if (res.data?.link) {
-              triggerDownload(res.data.link);
-              logActivity(`Downloaded file <strong>${f.name}</strong> from Amazon S3`, "📥", "green");
-            }
-          } else if (f.provider === "box") {
-            const res = await api.get(`/box/download/${f.accountId}?fileId=${f.id}`);
-            if (res.data?.link) {
-              triggerDownload(res.data.link);
-              logActivity(`Downloaded file <strong>${f.name}</strong> from Box`, "📥", "green");
-            }
-          } else {
-            const dlink = f.webContentLink || f.url;
-            if (dlink) {
-              triggerDownload(dlink);
-              logActivity(`Downloaded file <strong>${f.name}</strong> from Cloud Storage`, "📥", "green");
-            }
-          }
-        } catch (err) {
-          console.error("Bulk download item failed:", err);
+  // Bulk Actions - Sequential Blob-Based Multi-Download
+  const handleBulkDownload = async () => {
+    if (!selectedFiles || selectedFiles.length === 0) return;
+
+    const total = selectedFiles.length;
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const f = selectedFiles[i];
+      try {
+        let downloadUrl = null;
+        if (f.provider === "dropbox") {
+          const res = await api.get(`/dropbox/download/${f.accountId}?path=${encodeURIComponent(f.id)}`);
+          downloadUrl = res.data?.link;
+        } else if (f.provider === "google") {
+          const token = localStorage.getItem("token");
+          downloadUrl = `${getCleanApiUrl(`/api/google/download/${f.accountId}?fileId=${f.id}`)}&token=${encodeURIComponent(token)}`;
+        } else if (f.provider === "onedrive") {
+          const res = await api.get(`/onedrive/download/${f.accountId}?fileId=${f.id}`);
+          downloadUrl = res.data?.link;
+        } else if (f.provider === "s3") {
+          const res = await api.get(`/s3/download/${f.accountId}?fileId=${encodeURIComponent(f.id)}`);
+          downloadUrl = res.data?.link;
+        } else if (f.provider === "box") {
+          const res = await api.get(`/box/download/${f.accountId}?fileId=${f.id}`);
+          downloadUrl = res.data?.link;
+        } else {
+          downloadUrl = f.webContentLink || f.url;
         }
-      }, index * 200);
-    });
+
+        if (downloadUrl) {
+          await triggerDownload(downloadUrl, f.name);
+          logActivity(`Downloaded file <strong>${f.name}</strong> (${i + 1}/${total})`, "📥", "green");
+        }
+      } catch (err) {
+        console.error(`Multi download item failed for ${f.name}:`, err);
+      }
+
+      // Add a 600ms delay between downloads so the browser process queue handles each file smoothly
+      if (i < selectedFiles.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+    }
   };
 
 
@@ -1468,62 +1471,64 @@ const Files = () => {
             <option value="size_asc">💾 Size (Small)</option>
           </select>
 
-                    <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
-            <button 
-              className={`filter-select select-mode-btn ${isSelectMode ? "active" : ""}`}
-              onClick={() => {
-                setIsSelectMode(!isSelectMode);
-                if (isSelectMode) setSelectedFileIds([]);
-              }}
-              style={{
-                padding: "6px 16px",
-                background: isSelectMode ? "rgba(99, 102, 241, 0.2)" : "rgba(255, 255, 255, 0.05)",
-                border: isSelectMode ? "1px solid rgba(99, 102, 241, 0.4)" : "1px solid rgba(255, 255, 255, 0.08)",
-                borderRadius: "var(--radius-md)",
-                color: isSelectMode ? "#a5b4fc" : "var(--text-secondary)",
-                fontSize: "12.5px",
-                fontWeight: "600",
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                height: "35px",
-                transition: "all 0.15s ease"
-              }}
-            >
-              🔳 {isSelectMode ? "Cancel" : "Select"}
-            </button>
+                    {!isMobile && (
+                      <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
+                        <button 
+                          className={`filter-select select-mode-btn ${isSelectMode ? "active" : ""}`}
+                          onClick={() => {
+                            setIsSelectMode(!isSelectMode);
+                            if (isSelectMode) setSelectedFileIds([]);
+                          }}
+                          style={{
+                            padding: "6px 16px",
+                            background: isSelectMode ? "rgba(99, 102, 241, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                            border: isSelectMode ? "1px solid rgba(99, 102, 241, 0.4)" : "1px solid rgba(255, 255, 255, 0.08)",
+                            borderRadius: "var(--radius-md)",
+                            color: isSelectMode ? "#a5b4fc" : "var(--text-secondary)",
+                            fontSize: "12.5px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            height: "35px",
+                            transition: "all 0.15s ease"
+                          }}
+                        >
+                          {isSelectMode ? "Cancel" : "Multi-Select"}
+                        </button>
 
-            <button 
-              className="reset-filters-btn" 
-              onClick={handleResetFilters}
-              style={{
-                padding: "6px 16px",
-                background: "rgba(99, 102, 241, 0.1)",
-                border: "1px solid rgba(99, 102, 241, 0.2)",
-                borderRadius: "var(--radius-md)",
-                color: "#a5b4fc",
-                fontSize: "12.5px",
-                fontWeight: "600",
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                height: "35px",
-                transition: "all 0.15s ease"
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgba(99, 102, 241, 0.2)";
-                e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.35)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgba(99, 102, 241, 0.1)";
-                e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.2)";
-              }}
-            >
-              🔄 Reset
-            </button>
-          </div>
+                        <button 
+                          className="reset-filters-btn" 
+                          onClick={handleResetFilters}
+                          style={{
+                            padding: "6px 16px",
+                            background: "rgba(99, 102, 241, 0.1)",
+                            border: "1px solid rgba(99, 102, 241, 0.2)",
+                            borderRadius: "var(--radius-md)",
+                            color: "#a5b4fc",
+                            fontSize: "12.5px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            height: "35px",
+                            transition: "all 0.15s ease"
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "rgba(99, 102, 241, 0.2)";
+                            e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.35)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "rgba(99, 102, 241, 0.1)";
+                            e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.2)";
+                          }}
+                        >
+                          🔄 Reset
+                        </button>
+                      </div>
+                    )}
 
 
         </div>
@@ -1654,6 +1659,25 @@ const Files = () => {
             <div className="fm-files-section">
           <div className="section-header">
             <h3>Files <span className="item-count">{filteredFiles.length} items</span></h3>
+            {isMobile && (
+              <div className="mobile-section-header-actions">
+                <button 
+                  className={`mobile-header-btn select-btn ${isSelectMode ? "active" : ""}`}
+                  onClick={() => {
+                    setIsSelectMode(!isSelectMode);
+                    if (isSelectMode) setSelectedFileIds([]);
+                  }}
+                >
+                  {isSelectMode ? "Cancel" : "Multi-Select"}
+                </button>
+                <button 
+                  className="mobile-header-btn reset-btn"
+                  onClick={handleResetFilters}
+                >
+                  🔄 Reset
+                </button>
+              </div>
+            )}
           </div>
 
           {loading ? (
@@ -1690,7 +1714,9 @@ const Files = () => {
                     const providerLabel = file.provider === 'google' ? 'Google Drive' : file.provider === 'dropbox' ? 'Dropbox' : file.provider === 's3' ? 'Amazon S3' : file.provider === 'box' ? 'Box' : 'OneDrive';
                     
                     const fileDateStr = file.createdAt || file.updatedAt || file.modifiedTime;
-                    const formattedDate = fileDateStr ? new Date(fileDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+                    const formattedDateShort = formatDateShort(fileDateStr);
+                    const accountDisplay = file.accountEmail || providerLabel;
+                    const formattedSize = file.size ? formatSize(file.size) : "-";
 
                     return (
                       <div 
@@ -1714,7 +1740,16 @@ const Files = () => {
                             {file.name}
                           </span>
                           <span className="native-file-subtext">
-                            {providerLabel} • {file.size ? formatSize(file.size) : "-"} {formattedDate ? `• ${formattedDate}` : ""}
+                            {providerIcons[file.provider] && (
+                              <img 
+                                src={providerIcons[file.provider]} 
+                                alt={file.provider} 
+                                className="mobile-subtext-provider-logo" 
+                              />
+                            )}
+                            <span className="subtext-account">{accountDisplay}</span>
+                            {formattedDateShort && <span className="subtext-date"> • {formattedDateShort}</span>}
+                            <span className="subtext-size"> • {formattedSize}</span>
                           </span>
                         </div>
 
@@ -1755,8 +1790,10 @@ const Files = () => {
                 {/* NATIVE MOBILE BOTTOM SHEET DRAWER FOR ACTIONS */}
                 {selectedMobileFile && (() => {
                   const selDateStr = selectedMobileFile.createdAt || selectedMobileFile.updatedAt || selectedMobileFile.modifiedTime;
-                  const selFormattedDate = selDateStr ? new Date(selDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+                  const selFormattedDateShort = formatDateShort(selDateStr);
                   const selProviderLabel = selectedMobileFile.provider === 'google' ? 'Google Drive' : selectedMobileFile.provider === 'dropbox' ? 'Dropbox' : selectedMobileFile.provider === 's3' ? 'Amazon S3' : selectedMobileFile.provider === 'box' ? 'Box' : 'OneDrive';
+                  const selAccountDisplay = selectedMobileFile.accountEmail || selProviderLabel;
+                  const selFormattedSize = selectedMobileFile.size ? formatSize(selectedMobileFile.size) : "-";
 
                   return (
                     <div className="mobile-sheet-backdrop" onClick={() => setSelectedMobileFile(null)}>
@@ -1770,12 +1807,21 @@ const Files = () => {
                           <div className="sheet-file-details">
                             <h4 className="sheet-file-title">{selectedMobileFile.name}</h4>
                             <p className="sheet-file-sub">
-                              {selProviderLabel} • {selectedMobileFile.size ? formatSize(selectedMobileFile.size) : "-"} {selFormattedDate ? `• ${selFormattedDate}` : ""}
+                              {providerIcons[selectedMobileFile.provider] && (
+                                <img 
+                                  src={providerIcons[selectedMobileFile.provider]} 
+                                  alt={selectedMobileFile.provider} 
+                                  className="mobile-subtext-provider-logo" 
+                                />
+                              )}
+                              <span>{selAccountDisplay}</span>
+                              {selFormattedDateShort && <span> • {selFormattedDateShort}</span>}
+                              <span> • {selFormattedSize}</span>
                             </p>
                           </div>
                         </div>
 
-                      <div className="mobile-sheet-actions">
+                        <div className="mobile-sheet-actions">
                         <a 
                           href={getFileOpenUrl(selectedMobileFile)} 
                           target="_blank" 
@@ -1783,7 +1829,7 @@ const Files = () => {
                           className="sheet-btn primary"
                           onClick={() => setSelectedMobileFile(null)}
                         >
-                          <span className="btn-icon">👁️</span> Open / Preview File
+                          <span className="btn-icon">👁️</span> Open File
                         </a>
                         <button 
                           className="sheet-btn"
@@ -1792,7 +1838,7 @@ const Files = () => {
                             setSelectedMobileFile(null);
                           }}
                         >
-                          <span className="btn-icon">⬇️</span> Download File
+                          <span className="btn-icon">📥</span> Download File
                         </button>
                         <button 
                           className="sheet-btn"
@@ -1881,7 +1927,7 @@ const Files = () => {
                           </td>
                           <td className="file-size-cell">{file.size ? formatSize(file.size) : "-"}</td>
                           <td className="file-modified-cell">
-                            {file.createdAt ? new Date(file.createdAt).toLocaleDateString(undefined, {
+                            {file.createdAt ? new Date(file.createdAt).toLocaleDateString("en-GB", {
                               year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
                             }) : "-"}
                           </td>

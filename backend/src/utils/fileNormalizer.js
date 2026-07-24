@@ -64,6 +64,7 @@ export const normalizeFile = (
           : null,
 
       url: file.webViewLink || null,
+      officialUrl: file.webViewLink || null,
       webContentLink: `/api/google/download/${accountId}?fileId=${file.id}`,
 
       createdAt: file.createdTime || null,
@@ -99,6 +100,8 @@ export const normalizeFile = (
       type = "document";
     }
 
+    const dropboxUrl = file.webViewLink || `https://www.dropbox.com/home` + (file.path_display || "");
+
     return {
       id: file.id,
       name,
@@ -109,7 +112,8 @@ export const normalizeFile = (
       accountEmail,
       thumbnail: file.thumbnailLink || null,
       path: file.path_display ? file.path_display.substring(0, file.path_display.lastIndexOf("/")) || "/" : "/",
-      url: file.webViewLink || `https://www.dropbox.com/home` + (file.path_display || ""),
+      url: dropboxUrl,
+      officialUrl: dropboxUrl,
       createdAt: file.server_modified || null,
       mimeType: type === "image" ? `image/${ext}` : type === "video" ? `video/${ext}` : "application/octet-stream",
     };
@@ -170,7 +174,8 @@ export const normalizeFile = (
       accountEmail,
       thumbnail: type === "image" || type === "video" ? `/api/onedrive/thumbnail/${accountId}?fileId=${file.id}` : null,
       path: cleanPath,
-      url: file.webUrl || null,
+      url: `/api/onedrive/open/${accountId}?fileId=${file.id}`,
+      officialUrl: file.webUrl || null,
       webContentLink: file["@microsoft.graph.downloadUrl"] || null,
       createdAt: file.createdDateTime || file.lastModifiedDateTime || null,
       mimeType: mime || "application/octet-stream"
@@ -208,6 +213,7 @@ export const normalizeFile = (
     const parts = file.Key.split("/");
     parts.pop(); // remove file name
     const cleanPath = "/" + parts.join("/");
+    const s3Url = `/api/s3/download/${accountId}?fileId=${encodeURIComponent(file.Key)}`;
 
     return {
       id: file.Key,
@@ -219,8 +225,9 @@ export const normalizeFile = (
       accountEmail,
       thumbnail: null,
       path: cleanPath,
-      url: `/api/s3/download/${accountId}?fileId=${encodeURIComponent(file.Key)}`,
-      webContentLink: `/api/s3/download/${accountId}?fileId=${encodeURIComponent(file.Key)}`,
+      url: s3Url,
+      officialUrl: s3Url,
+      webContentLink: s3Url,
       createdAt: file.LastModified || null,
       mimeType
     };
@@ -276,7 +283,8 @@ export const normalizeFile = (
       accountEmail,
       thumbnail: null,
       path: cleanPath,
-      url: file.shared_link?.url || `https://app.box.com/file/${file.id}`,
+      url: `/api/box/open/${accountId}?fileId=${file.id}`,
+      officialUrl: file.shared_link?.url || `https://app.box.com/file/${file.id}`,
       webContentLink: `/api/box/download/${accountId}?fileId=${file.id}`,
       createdAt: file.modified_at || file.created_at || null,
       mimeType

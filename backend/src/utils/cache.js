@@ -10,6 +10,11 @@ class Cache {
    * @param {number} ttlMs TTL in milliseconds (default 5 minutes)
    */
   set(key, value, ttlMs = 5 * 60 * 1000) {
+    // Memory Safety Guard: Cap max entries at 500 to protect 512MB Render free tier
+    if (this.cache.size >= 500) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey) this.cache.delete(oldestKey);
+    }
     const expiry = Date.now() + ttlMs;
     this.cache.set(key, { value, expiry });
   }

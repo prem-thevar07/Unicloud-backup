@@ -535,7 +535,7 @@ const Photos = () => {
                     <div className="photo-overlay">
                       <span className="photo-name">{photo.name}</span>
                       <span className="photo-date">
-                        {new Date(photo.createdTime).toLocaleDateString()}
+                        {new Date(photo.createdTime).toLocaleDateString("en-GB")}
                       </span>
                     </div>
                   </div>

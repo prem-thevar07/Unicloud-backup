@@ -252,6 +252,99 @@ router.get("/download/:id", auth, async (req, res) => {
 });
 
 /* ===============================
+   📂 BROWSER OPEN / PREVIEW LINK (OAuth Authenticated)
+=============================== */
+router.get("/open/:id", auth, async (req, res) => {
+  try {
+    const accountId = req.params.id;
+    const { fileId } = req.query;
+
+    if (!fileId) {
+      return res.status(400).json({ message: "File ID is required" });
+    }
+
+    const account = await CloudAccount.findOne({
+      _id: accountId,
+      userId: req.user.id,
+    });
+
+    if (!account) {
+      return res.status(404).json({ message: "Account not found" });
+    }
+
+    let token = account.accessToken;
+    let driveItemRes;
+
+    const fetchItem = async (accessToken) => {
+      return axios.get(`https://graph.microsoft.com/v1.0/me/drive/items/${fileId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+    };
+
+    try {
+      driveItemRes = await fetchItem(token);
+    } catch (err) {
+      if (err.response?.status === 401 && account.refreshToken) {
+        const { refreshOneDriveToken } = await import("../services/providers/onedrive.provider.js");
+        token = await refreshOneDriveToken(account);
+        driveItemRes = await fetchItem(token);
+      } else {
+        throw err;
+      }
+    }
+
+    const name = driveItemRes.data.name || "file";
+    const mime = driveItemRes.data.file?.mimeType || "application/octet-stream";
+    const ext = name.split(".").pop().toLowerCase();
+
+    // 1. Try Microsoft Graph OAuth Preview embed link (Pre-authenticated, works for ANY connected account without browser login)
+    try {
+      const previewRes = await axios.post(
+        `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/preview`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (previewRes.data?.getUrl) {
+        return res.redirect(previewRes.data.getUrl);
+      }
+    } catch (previewErr) {
+      console.warn("Graph preview embed link failed:", previewErr.message);
+    }
+
+    // 2. Direct Inline Content Stream (Images, Videos, PDFs, Text, Code, Documents)
+    try {
+      const streamRes = await axios.get(`https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: "stream"
+      });
+
+      const contentType = mime.includes("pdf") ? "application/pdf" :
+                        mime.startsWith("image/") ? mime :
+                        mime.startsWith("video/") ? mime :
+                        mime.startsWith("audio/") ? mime :
+                        "text/plain; charset=utf-8";
+
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(name)}"`);
+      return streamRes.data.pipe(res);
+    } catch (streamErr) {
+      console.warn("Direct stream failed:", streamErr.message);
+    }
+
+    // 3. Fallback to @microsoft.graph.downloadUrl
+    const downloadUrl = driveItemRes.data["@microsoft.graph.downloadUrl"];
+    if (downloadUrl) {
+      return res.redirect(downloadUrl);
+    }
+
+    res.status(404).json({ message: "File preview not available" });
+  } catch (err) {
+    console.error("❌ OneDrive open link error:", err.response?.data || err.message);
+    res.status(500).json({ message: "Failed to open OneDrive file" });
+  }
+});
+
+/* ===============================
    🖼️ GET THUMBNAIL PROXY
 =============================== */
 router.get("/thumbnail/:id", auth, async (req, res) => {

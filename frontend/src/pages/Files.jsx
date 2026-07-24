@@ -340,7 +340,7 @@ const Files = () => {
   const [viewMode, setViewMode] = useState("list"); // "list" | "grid"
   const [selectedFileIds, setSelectedFileIds] = useState([]);
   const [selectedFolderFilters, setSelectedFolderFilters] = useState([]); // Array of selected folder objects [{ id, name, path, accountId, provider }]
-  const [expandedAccountId, setExpandedAccountId] = useState(null);
+  const [expandedAccountIds, setExpandedAccountIds] = useState([]);
   const [foldersByAccount, setFoldersByAccount] = useState({});
   const [explorerSubfolders, setExplorerSubfolders] = useState([]);
   const [explorerBreadcrumbs, setExplorerBreadcrumbs] = useState([
@@ -526,7 +526,13 @@ const Files = () => {
           });
 
           if (res.files && res.files.length > 0) {
-            allFolderFiles.push(...res.files);
+            const taggedFiles = res.files.map(f => ({
+              ...f,
+              folderId: item.id || sf.id,
+              rootFolderFilterId: sf.id,
+              accountId: f.accountId || sf.accountId
+            }));
+            allFolderFiles.push(...taggedFiles);
           }
 
           if (res.subfolders && res.subfolders.length > 0) {
@@ -550,83 +556,68 @@ const Files = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const getFilesParams = {
-        view: "unified",
-        mode: "all",
-        pageSize: 100,
-        search: debouncedSearch
-      };
-
-      if (selectedAccounts.length > 0) {
-        getFilesParams.accounts = selectedAccounts.join(",");
-      }
-
-      // If specific folders are selected in multi-select mode, fetch files directly from those folders AND their subfolders!
       const activeFolders = selectedFolderFilters.filter(sf => sf && sf.id && sf.id !== "root");
-      if (activeFolders.length > 0 && !debouncedSearch) {
-        const folderPromises = activeFolders.map(sf => fetchDeepFolderFiles(sf));
-        
-        const [accountsRes, ...folderResults] = await Promise.all([
-          api.get("/accounts").catch(() => ({ data: [] })),
-          ...folderPromises
-        ]);
+      const folderAccountIds = new Set(activeFolders.map(sf => String(sf.accountId)));
 
-        const combinedFiles = folderResults.flatMap(filesArr => filesArr || []);
-        const uniqueFilesMap = new Map();
-        combinedFiles.forEach(f => {
-          if (f && f.id && !uniqueFilesMap.has(f.id)) {
-            uniqueFilesMap.set(f.id, {
-              ...f,
-              accountId: f.accountId || activeFolders[0]?.accountId
-            });
-          }
-        });
+      // Whole accounts selected (excluding accounts that have specific folder filters active)
+      const wholeAccounts = selectedAccounts.filter(accId => !folderAccountIds.has(String(accId)));
 
-        const folderFiles = Array.from(uniqueFilesMap.values());
-
-        setFiles(folderFiles);
-        const fetchedAccounts = accountsRes.data || [];
-        setAccounts(fetchedAccounts);
-        try {
-          localStorage.setItem("unicloud_cached_accounts", JSON.stringify(fetchedAccounts));
-        } catch (_) {}
-        return;
-      }
-
-      // Fetch files and accounts in parallel
-      const [filesRes, accountsRes] = await Promise.all([
-        getFiles(getFilesParams),
-        api.get("/accounts").catch(() => ({ data: [] }))
-      ]);
-
-      if (selectedAccounts.length === 1) {
-        const targetAccId = selectedAccounts[0];
-        const targetFolderId = activeFolderFilter ? activeFolderFilter.id : "root";
-        const targetFolderPath = activeFolderFilter ? (activeFolderFilter.path || activeFolderFilter.name) : "/";
-        getExplorerContents({ accountId: targetAccId, folderId: targetFolderId, folderPath: targetFolderPath })
-          .then((res) => {
-            setExplorerSubfolders(res.subfolders || []);
-          })
-          .catch(() => setExplorerSubfolders([]));
-      } else {
-        setExplorerSubfolders([]);
-      }
-
-      const allFiles = [
-        ...(filesRes.data?.image || []),
-        ...(filesRes.data?.video || []),
-        ...(filesRes.data?.document || []),
-        ...(filesRes.data?.other || []),
-      ];
-
-            setFiles(allFiles);
-      setPageTokens(filesRes.nextPageTokens || {});
-      
+      const accountsRes = await api.get("/accounts").catch(() => ({ data: [] }));
       const fetchedAccounts = accountsRes.data || [];
       setAccounts(fetchedAccounts);
       try {
         localStorage.setItem("unicloud_cached_accounts", JSON.stringify(fetchedAccounts));
       } catch (_) {}
+
+      // 1. Fetch deep files for active folder filters
+      let folderPromises = [];
+      if (activeFolders.length > 0) {
+        folderPromises = activeFolders.map(sf => fetchDeepFolderFiles(sf));
+      }
+
+      // 2. Fetch general files for whole accounts (or all accounts if no folder/account filter)
+      let wholeAccountPromise = Promise.resolve({ data: {} });
+      if (wholeAccounts.length > 0 || (selectedAccounts.length === 0 && activeFolders.length === 0)) {
+        const getFilesParams = {
+          view: "unified",
+          mode: "all",
+          pageSize: 100,
+          search: debouncedSearch
+        };
+        if (wholeAccounts.length > 0) {
+          getFilesParams.accounts = wholeAccounts.join(",");
+        }
+        wholeAccountPromise = getFiles(getFilesParams).catch(() => ({ data: {} }));
+      }
+
+      const [wholeFilesRes, ...folderResults] = await Promise.all([
+        wholeAccountPromise,
+        ...folderPromises
+      ]);
+
+      const accountFiles = [
+        ...(wholeFilesRes.data?.image || []),
+        ...(wholeFilesRes.data?.video || []),
+        ...(wholeFilesRes.data?.document || []),
+        ...(wholeFilesRes.data?.other || []),
+      ];
+
+      const folderFiles = folderResults.flatMap(filesArr => filesArr || []);
+
+      const uniqueFilesMap = new Map();
+      [...accountFiles, ...folderFiles].forEach(f => {
+        if (f && f.id && !uniqueFilesMap.has(f.id)) {
+          uniqueFilesMap.set(f.id, f);
+        }
+      });
+
+      const combined = Array.from(uniqueFilesMap.values());
+      combined.sort((a, b) => getFileTimestamp(b) - getFileTimestamp(a));
+
+      setFiles(combined);
+      if (wholeFilesRes.nextPageTokens) {
+        setPageTokens(wholeFilesRes.nextPageTokens);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -639,36 +630,25 @@ const Files = () => {
     if (isFetchingRef.current) return;
     
     // Check if there are any valid page tokens left
-    const hasMoreInCloud = Object.values(pageTokens).some(token => token !== "EOF");
+    const hasMoreInCloud = Object.values(pageTokens).some(token => token && token !== "EOF");
     if (!hasMoreInCloud) return;
 
     isFetchingRef.current = true;
     setLoadingMoreCloud(true);
     try {
-            const getFilesParams = {
+      const getFilesParams = {
         view: "unified",
-        mode: "all", // Fetch everything
+        mode: "all",
+        pageSize: 100,
         search: debouncedSearch,
-        pageTokens 
+        pageTokens: JSON.stringify(pageTokens)
       };
 
       if (selectedAccounts.length > 0) {
         getFilesParams.accounts = selectedAccounts.join(",");
       }
 
-
-      if (activeFolderFilter && !activeFolderFilter.isVirtual) {
-        getFilesParams.folderId = activeFolderFilter.id;
-        getFilesParams.folderPath = activeFolderFilter.path;
-        getFilesParams.folderAccountId = activeFolderFilter.accountId;
-      } else {
-        const { startDateStr, endDateStr } = getTimelineDates();
-        if (startDateStr) getFilesParams.startDate = startDateStr;
-        if (endDateStr) getFilesParams.endDate = endDateStr;
-      }
-
       const filesRes = await getFiles(getFilesParams);
-
 
       const newFiles = [
         ...(filesRes.data?.image || []),
@@ -677,9 +657,13 @@ const Files = () => {
         ...(filesRes.data?.other || []),
       ];
 
-      setFiles(prev => [...prev, ...newFiles]);
+      setFiles(prev => {
+        const existingIds = new Set(prev.map(f => f.id));
+        const uniqueNew = newFiles.filter(f => f && f.id && !existingIds.has(f.id));
+        return [...prev, ...uniqueNew];
+      });
       setPageTokens(filesRes.nextPageTokens || {});
-      setVisibleCount(prev => prev + 15);
+      setVisibleCount(prev => prev + 30);
     } catch (err) {
       console.error("Fetch more failed:", err);
     } finally {
@@ -688,8 +672,15 @@ const Files = () => {
     }
   };
 
+  const getFileTimestamp = (f) => {
+    if (!f) return 0;
+    const val = f.createdAt || f.createdTime || f.updatedAt || f.modifiedTime || f.modified_at || f.created_at;
+    if (!val) return 0;
+    const t = new Date(val).getTime();
+    return isNaN(t) ? 0 : t;
+  };
 
-    const applyFilters = (resetPagination = true) => {
+  const applyFilters = (resetPagination = true) => {
     let data = [...files];
 
     // Filter by search
@@ -717,20 +708,20 @@ const Files = () => {
       }
     }
 
-    // Filter by account
-    if (selectedAccounts.length > 0) {
+    // Filter by combination of Selected Accounts AND Selected Folders
+    const activeFolders = selectedFolderFilters.filter(sf => sf && sf.id && sf.id !== "root");
+    const hasFolderFilters = activeFolders.length > 0;
+    const hasAccountFilters = selectedAccounts.length > 0;
+
+    if (hasFolderFilters || hasAccountFilters) {
       data = data.filter((f) => {
         const fileAccId = String(f.accountId || f.account_id || "");
-        return selectedAccounts.some(accId => String(accId) === fileAccId);
-      });
-    }
 
-    // Filter by selected folder filters during search mode
-    const hasNonRootFolders = selectedFolderFilters.some(sf => sf && sf.id && sf.id !== "root");
-    if (hasNonRootFolders && search) {
-      data = data.filter((f) => {
-        return selectedFolderFilters.some(sf => {
-          if (!sf || sf.id === "root") return true;
+        // Matches selected folder filter?
+        const matchesFolder = activeFolders.some(sf => {
+          if (f.rootFolderFilterId && String(f.rootFolderFilterId) === String(sf.id)) {
+            return true;
+          }
           if (sf.isVirtual) {
             return getFileVirtualPath(f) === sf.path;
           }
@@ -739,19 +730,28 @@ const Files = () => {
           const sfPath = sf.path || sf.name || "";
           return (sf.id && fFolderId === String(sf.id)) || (sfPath && sfPath !== "/" && fPath.startsWith(sfPath));
         });
+
+        // Matches selected account filter?
+        const matchesAccount = selectedAccounts.some(accId => String(accId) === fileAccId);
+
+        // If folder filters are present, check if file matches folder or whole account
+        if (hasFolderFilters) {
+          const isFolderAccount = activeFolders.some(sf => String(sf.accountId) === fileAccId);
+          if (isFolderAccount) {
+            return matchesFolder;
+          }
+          return matchesAccount;
+        }
+
+        return matchesAccount;
       });
     }
 
-
-
-    
-
-
-    // Apply Sorting
+    // Apply Sorting across all files strictly by chosen sort option
     if (sortOption === "newest") {
-      data.sort((a, b) => new Date(b.createdAt || a.createdAt || 0) - new Date(a.createdAt || b.createdAt || 0));
+      data.sort((a, b) => getFileTimestamp(b) - getFileTimestamp(a));
     } else if (sortOption === "oldest") {
-      data.sort((a, b) => new Date(a.createdAt || b.createdAt || 0) - new Date(b.createdAt || a.createdAt || 0));
+      data.sort((a, b) => getFileTimestamp(a) - getFileTimestamp(b));
     } else if (sortOption === "name_asc") {
       data.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     } else if (sortOption === "name_desc") {
@@ -764,21 +764,29 @@ const Files = () => {
 
     setFilteredFiles(data);
     if (resetPagination) {
-      setVisibleCount(15); // Only reset visible count on filter change, not on load more
+      setVisibleCount(30);
     }
   };
 
 
-  const hasMoreInCloud = Object.values(pageTokens).some(token => token !== "EOF");
+  const hasNonRootFolders = selectedFolderFilters.some(sf => sf && sf.id && sf.id !== "root");
+  const hasMoreInCloud = !hasNonRootFolders && Object.values(pageTokens).some(token => token && token !== "EOF");
 
   const triggerLoadMore = () => {
+    if (hasNonRootFolders) {
+      if (visibleCount < filteredFiles.length) {
+        setVisibleCount((prev) => Math.min(prev + 30, filteredFiles.length));
+      }
+      return;
+    }
+
     if (!loading && !isFetchingRef.current && !localLoadingMore && !loadingMoreCloud) {
       if (visibleCount < filteredFiles.length) {
         setLocalLoadingMore(true);
         setTimeout(() => {
-          setVisibleCount((prev) => prev + 15);
+          setVisibleCount((prev) => Math.min(prev + 30, filteredFiles.length));
           setLocalLoadingMore(false);
-        }, 350);
+        }, 50);
       } else if (hasMoreInCloud) {
         fetchMoreFromCloud();
       }
@@ -794,46 +802,57 @@ const Files = () => {
 
   useEffect(() => {
     const handleWindowScroll = () => {
-      if (!isMobile) return;
       const scrollTop = window.scrollY || document.documentElement.scrollTop;
       const clientHeight = window.innerHeight || document.documentElement.clientHeight;
       const scrollHeight = document.documentElement.scrollHeight;
 
-      if (scrollHeight - scrollTop <= clientHeight + 180) {
+      if (scrollHeight - scrollTop <= clientHeight + 300) {
         triggerLoadMore();
       }
     };
 
     window.addEventListener("scroll", handleWindowScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleWindowScroll);
-  }, [isMobile, loading, localLoadingMore, loadingMoreCloud, visibleCount, filteredFiles.length, hasMoreInCloud]);
+  }, [loading, localLoadingMore, loadingMoreCloud, visibleCount, filteredFiles.length, pageTokens]);
 
 
   // Calculate dynamic storage summaries
   const totalUsedStorage = accounts.reduce((accSum, a) => accSum + (a.storage?.used || 0), 0);
   const totalTotalStorage = accounts.reduce((accSum, a) => accSum + (a.storage?.total || 15 * 1024 * 1024 * 1024), 0);
 
-  // Account Click (Single Select)
+  // Account Click (Expand/Collapse Folder Tree)
   const handleAccountClick = (accountId) => {
-    setSelectedFolderFilters([]);
-    setSelectedAccounts([accountId]);
-    setExpandedAccountId(prev => (prev === accountId ? null : accountId));
-    if (!foldersByAccount[accountId]) {
-      loadFoldersForAccount(accountId);
+    const accIdStr = String(accountId);
+    setExpandedAccountIds(prev => {
+      if (prev.includes(accIdStr)) {
+        return prev.filter(id => id !== accIdStr);
+      } else {
+        return [...prev, accIdStr];
+      }
+    });
+
+    if (!foldersByAccount[accIdStr]) {
+      loadFoldersForAccount(accIdStr);
     }
   };
 
   // Account Checkbox Toggle (Multi-Select)
   const toggleAccountCheckbox = (e, accountId) => {
     e.stopPropagation();
-    setSelectedFolderFilters([]);
+    const accIdStr = String(accountId);
     setSelectedAccounts(prev => {
-      if (prev.includes(accountId)) {
-        const next = prev.filter(id => id !== accountId);
-        return next.length === 0 ? [accountId] : next;
-      } else {
-        return [...prev, accountId];
+      const isSelected = prev.includes(accountId) || prev.includes(accIdStr);
+      const nextAccounts = isSelected
+        ? prev.filter(id => String(id) !== accIdStr)
+        : [...prev, accountId];
+
+      if (!isSelected) {
+        setExpandedAccountIds(exp => Array.from(new Set([...exp, accIdStr])));
+        if (!foldersByAccount[accIdStr]) {
+          loadFoldersForAccount(accIdStr);
+        }
       }
+      return nextAccounts;
     });
   };
 
@@ -873,11 +892,9 @@ const Files = () => {
     }
     setSelectedFolderFilters(prev => {
       const exists = prev.some(f => f.id === folderObj.id);
-      if (exists) {
-        return prev.filter(f => f.id !== folderObj.id);
-      } else {
-        return [...prev, folderObj];
-      }
+      return exists
+        ? prev.filter(f => f.id !== folderObj.id)
+        : [...prev, folderObj];
     });
   };
 
@@ -892,7 +909,7 @@ const Files = () => {
     setCustomEndDate("");
     setSelectedAccounts([]);
     setSelectedFolderFilters([]);
-    setExpandedAccountId(null);
+    setExpandedAccountIds([]);
     setSortOption("newest");
   };
 
@@ -1102,78 +1119,58 @@ const Files = () => {
     }
   };
 
-    const showSkeletons = loadingMoreCloud || localLoadingMore;
+  const showSkeletons = !hasNonRootFolders && (loadingMoreCloud || localLoadingMore);
 
-  const getAccountTree = (account) => {
-    const folders = foldersByAccount[account._id] || [];
-    const root = { id: "root", name: "Root", type: "folder", children: [] };
-    const pathMap = { "/": root };
+  const getAccountTree = (account, foldersOverride = null) => {
+    const folders = foldersOverride || foldersByAccount[account._id] || foldersByAccount[String(account._id)] || [];
+    
+    // Convert flat folders array to tree nodes
+    const nodesMap = {};
+    const topLevelNodes = [];
 
-    const sortedFolders = [...folders].sort((a, b) => {
-      const pathA = a.path || "";
-      const pathB = b.path || "";
-      const slashesA = (pathA.match(/\//g) || []).length;
-      const slashesB = (pathB.match(/\//g) || []).length;
-      return slashesA - slashesB;
-    });
-
-    sortedFolders.forEach(folder => {
-      const fPath = folder.path || ("/" + folder.name);
+    folders.forEach(folder => {
+      if (!folder || !folder.id) return;
       const node = {
         id: folder.id,
-        name: folder.name,
+        name: folder.name || "Untitled Folder",
         type: "folder",
-        path: fPath,
-        accountId: folder.accountId,
-        provider: folder.provider,
-        children: []
+        path: folder.path || ("/" + folder.name),
+        accountId: folder.accountId || String(account._id),
+        provider: folder.provider || account.provider,
+        parentId: folder.parentId || folder.parent_id || null,
+        children: [],
+        childrenLoaded: false
       };
-      pathMap[fPath] = node;
+      nodesMap[folder.id] = node;
+    });
 
-      const lastSlashIndex = fPath.lastIndexOf("/");
-      let parentPath = "/";
-      if (lastSlashIndex > 0) {
-        parentPath = fPath.substring(0, lastSlashIndex);
+    // Link parent-child relationships or add to top level
+    folders.forEach(folder => {
+      if (!folder || !folder.id) return;
+      const node = nodesMap[folder.id];
+      const pId = folder.parentId || folder.parent_id;
+      if (pId && nodesMap[pId]) {
+        nodesMap[pId].children.push(node);
+      } else if (folder.id !== "root") {
+        topLevelNodes.push(node);
       }
-
-      const parentNode = pathMap[parentPath] || root;
-      parentNode.children.push(node);
     });
 
-    files.forEach(file => {
-      if (String(file.accountId) !== String(account._id)) return;
-      const filePath = file.path || getFileVirtualPath(file) || "/";
-      const node = {
-        id: file.id,
-        name: file.name,
-        type: "file",
-        path: filePath,
-        size: file.size,
-        createdAt: file.createdAt,
-        provider: file.provider,
-        accountId: file.accountId,
-        fileObj: file
-      };
-      const parentNode = pathMap[filePath] || root;
-      parentNode.children.push(node);
-    });
+    // If topLevelNodes is empty but folders exist, fallback to all non-root folders
+    const rootChildren = topLevelNodes.length > 0 
+      ? topLevelNodes 
+      : folders.filter(f => f && f.id && f.id !== "root").map(f => ({
+          id: f.id,
+          name: f.name || "Untitled Folder",
+          type: "folder",
+          path: f.path || ("/" + f.name),
+          accountId: f.accountId || String(account._id),
+          provider: f.provider || account.provider,
+          children: [],
+          childrenLoaded: false
+        }));
 
-    const sortTree = (n) => {
-      n.children.sort((a, b) => {
-        if (a.type !== b.type) {
-          return a.type === "folder" ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name);
-      });
-      n.children.forEach(c => {
-        if (c.type === "folder") {
-          sortTree(c);
-        }
-      });
-    };
-    sortTree(root);
-
-    return root.children;
+    return rootChildren;
   };
 
   // Ref to debounce hover-off so flyouts don't vanish during mouse travel
@@ -1244,15 +1241,34 @@ const Files = () => {
                     return;
                   }
                   const currentTarget = e.currentTarget;
-                  hoverEnterTimer.current = setTimeout(() => {
+                  const accIdStr = String(acc._id);
+
+                  hoverEnterTimer.current = setTimeout(async () => {
                     const top = getRelativeTop(currentTarget);
-                    if (!foldersByAccount[acc._id]) {
-                      loadFoldersForAccount(acc._id);
+                    let folders = foldersByAccount[accIdStr] || foldersByAccount[acc._id];
+
+                    if (!folders || folders.length === 0) {
+                      try {
+                        const res = await api.get(`/files/folders?accountId=${accIdStr}`);
+                        let remoteFolders = Array.isArray(res.data) ? res.data : [];
+                        const rootItem = { id: "root", name: "Root / All Files", path: "/", provider: acc.provider, accountId: accIdStr };
+                        const hasRoot = remoteFolders.some(f => f.id === "root" || f.name === "Root / All Files");
+                        folders = hasRoot ? remoteFolders : [rootItem, ...remoteFolders];
+
+                        setFoldersByAccount(prev => ({
+                          ...prev,
+                          [accIdStr]: folders,
+                          [acc._id]: folders
+                        }));
+                      } catch (err) {
+                        console.error("Error loading hover folders:", err);
+                      }
                     }
-                    const children = getAccountTree(acc);
+
+                    const children = getAccountTree(acc, folders);
                     setFlyoutTops([top]);
                     setHoveredPath([{ level: 0, id: acc._id, name: acc.email, type: "account", children }]);
-                  }, 150);
+                  }, 120);
                 }}
                 onMouseLeave={() => {
                   if (hoverEnterTimer.current) {
@@ -1908,7 +1924,7 @@ const Files = () => {
               {foldersViewMode === "classic" ? (
                 <div className="folders-sidebar-list">
                 {accounts.map(acc => {
-                  const isExpanded = expandedAccountId === acc._id;
+                  const isExpanded = expandedAccountIds.includes(String(acc._id)) || expandedAccountIds.includes(acc._id);
                                     const isAccountSelected = selectedAccounts.includes(acc._id);
 
                                     const accountFolders = foldersByAccount[acc._id] || [];
@@ -2102,7 +2118,7 @@ const Files = () => {
                   ))}
 
                   {/* BOTTOM LOADING SPINNER ANIMATION */}
-                  {(localLoadingMore || loadingMoreCloud) && (
+                  {!hasNonRootFolders && (localLoadingMore || loadingMoreCloud) && (
                     <div className="mobile-bottom-loader">
                       <div className="mobile-spinner"></div>
                       <span>Loading more files...</span>
@@ -2190,6 +2206,7 @@ const Files = () => {
                 <table className="fm-files-table">
                   <thead>
                     <tr>
+                      <th className="col-index" style={{ width: "45px", textAlign: "center", opacity: 0.7 }}>#</th>
                       {isSelectMode && (
                         <th className="checkbox-col" onClick={toggleSelectAllFiles} style={{ cursor: "pointer" }}>
                           <div 
@@ -2210,7 +2227,7 @@ const Files = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredFiles.slice(0, visibleCount).map((file) => {
+                    {filteredFiles.slice(0, visibleCount).map((file, index) => {
                       const fileTypeKey = getFileTypeKey(file);
                       const config = fileTypeConfigs[fileTypeKey];
                       const virtualPath = getFileVirtualPath(file);
@@ -2223,6 +2240,9 @@ const Files = () => {
                           onClick={() => isSelectMode && toggleSelectFile(file.id)}
                           style={{ cursor: isSelectMode ? "pointer" : "default" }}
                         >
+                          <td style={{ textAlign: "center", fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>
+                            {index + 1}
+                          </td>
                           {isSelectMode && (
                             <td className="checkbox-cell" onClick={(e) => { e.stopPropagation(); toggleSelectFile(file.id); }}>
                               <div 

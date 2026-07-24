@@ -339,3 +339,213 @@ export const deleteFile = async (userId, { id, provider, accountId }) => {
   // Clear the file cache after deleting
   fileCache.clear();
 };
+
+export const getExplorerContents = async (userId, accountId, folderId = "root", folderPath = "/") => {
+  const account = await CloudAccount.findOne({ _id: accountId, userId });
+  if (!account) throw new Error("Account not found");
+
+  const provider = account.provider;
+  let subfolders = [];
+  let files = [];
+
+  if (provider === "google") {
+    const { google } = await import("googleapis");
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({
+      access_token: account.accessToken,
+      refresh_token: account.refreshToken,
+    });
+    try {
+      const tokenRes = await oauth2Client.getAccessToken();
+      if (tokenRes && tokenRes.token && tokenRes.token !== account.accessToken) {
+        account.accessToken = tokenRes.token;
+        await CloudAccount.updateOne({ _id: account._id }, { accessToken: tokenRes.token });
+      }
+    } catch (_) {}
+
+    const drive = google.drive({ version: "v3", auth: oauth2Client });
+    const targetParent = (!folderId || folderId === "root" || folderId === "/") ? "root" : folderId;
+
+    const folderRes = await drive.files.list({
+      pageSize: 100,
+      q: `'${targetParent}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: "files(id, name, createdTime, mimeType)",
+    });
+
+    subfolders = (folderRes.data.files || []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      parentId: targetParent,
+      provider: "google",
+      accountId: String(account._id),
+      accountEmail: account.email,
+      isFolder: true,
+    }));
+
+    const fileRes = await drive.files.list({
+      pageSize: 150,
+      q: `'${targetParent}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: "files(id, name, createdTime, modifiedTime, size, mimeType, webViewLink, thumbnailLink)",
+    });
+
+    files = (fileRes.data.files || []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      size: f.size ? Number(f.size) : 0,
+      createdAt: f.modifiedTime || f.createdTime,
+      mimeType: f.mimeType,
+      provider: "google",
+      accountId: String(account._id),
+      accountEmail: account.email,
+      parentFolder: targetParent,
+      url: f.webViewLink || "",
+      thumbnail: f.thumbnailLink || "",
+    }));
+  } else if (provider === "dropbox") {
+    const axios = (await import("axios")).default;
+    const token = account.accessToken;
+    const pathArg = (!folderPath || folderPath === "/" || folderPath === "root") ? "" : (folderPath.startsWith("/") ? folderPath : `/${folderPath}`);
+
+    const res = await axios.post(
+      "https://api.dropboxapi.com/2/files/list_folder",
+      { path: pathArg, limit: 100 },
+      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+    );
+
+    const entries = res.data.entries || [];
+    subfolders = entries.filter((e) => e[".tag"] === "folder").map((f) => ({
+      id: f.id || f.path_lower,
+      name: f.name,
+      path: f.path_lower,
+      provider: "dropbox",
+      accountId: String(account._id),
+      accountEmail: account.email,
+      isFolder: true,
+    }));
+
+    files = entries.filter((e) => e[".tag"] === "file").map((f) => ({
+      id: f.id || f.path_lower,
+      name: f.name,
+      size: f.size || 0,
+      createdAt: f.server_modified,
+      provider: "dropbox",
+      accountId: String(account._id),
+      accountEmail: account.email,
+      parentFolder: pathArg || "/",
+    }));
+  } else if (provider === "onedrive") {
+    const axios = (await import("axios")).default;
+    const token = account.accessToken;
+    const endpoint = (!folderId || folderId === "root" || folderId === "/")
+      ? "https://graph.microsoft.com/v1.0/me/drive/root/children"
+      : `https://graph.microsoft.com/v1.0/me/drive/items/${folderId}/children`;
+
+    const res = await axios.get(endpoint, { headers: { Authorization: `Bearer ${token}` } });
+    const items = res.data.value || [];
+
+    subfolders = items.filter((i) => i.folder).map((f) => ({
+      id: f.id,
+      name: f.name,
+      provider: "onedrive",
+      accountId: String(account._id),
+      accountEmail: account.email,
+      isFolder: true,
+    }));
+
+    files = items.filter((i) => i.file).map((f) => ({
+      id: f.id,
+      name: f.name,
+      size: f.size || 0,
+      createdAt: f.lastModifiedDateTime || f.createdDateTime,
+      provider: "onedrive",
+      accountId: String(account._id),
+      accountEmail: account.email,
+      parentFolder: folderId || "root",
+    }));
+  } else if (provider === "box") {
+    const axios = (await import("axios")).default;
+    const token = account.accessToken;
+    const boxFolderId = (!folderId || folderId === "root" || folderId === "/") ? "0" : folderId;
+    const res = await axios.get(`https://api.box.com/2.0/folders/${boxFolderId}/items?limit=100&fields=id,type,name,size,created_at,modified_at`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const items = res.data.entries || [];
+
+    subfolders = items.filter((i) => i.type === "folder").map((f) => ({
+      id: f.id,
+      name: f.name,
+      provider: "box",
+      accountId: String(account._id),
+      accountEmail: account.email,
+      isFolder: true,
+    }));
+
+    files = items.filter((i) => i.type === "file").map((f) => ({
+      id: f.id,
+      name: f.name,
+      size: f.size || 0,
+      createdAt: f.modified_at || f.created_at,
+      provider: "box",
+      accountId: String(account._id),
+      accountEmail: account.email,
+      parentFolder: boxFolderId,
+    }));
+  } else if (provider === "s3") {
+    const { S3Client, ListObjectsV2Command } = await import("@aws-sdk/client-s3");
+    const client = new S3Client({
+      region: account.s3Region || "us-east-1",
+      credentials: {
+        accessKeyId: account.s3AccessKeyId,
+        secretAccessKey: account.s3SecretAccessKey,
+      },
+    });
+
+    const prefix = (!folderPath || folderPath === "/" || folderPath === "root") ? "" : folderPath.replace(/^\/+|\/+$/g, "") + "/";
+    const command = new ListObjectsV2Command({
+      Bucket: account.s3BucketName,
+      Prefix: prefix,
+      Delimiter: "/",
+    });
+
+    const res = await client.send(command);
+
+    subfolders = (res.CommonPrefixes || []).map((p) => {
+      const folderName = p.Prefix.replace(prefix, "").replace(/\/$/, "");
+      return {
+        id: p.Prefix,
+        name: folderName,
+        path: p.Prefix,
+        provider: "s3",
+        accountId: String(account._id),
+        accountEmail: account.email,
+        isFolder: true,
+      };
+    });
+
+    files = (res.Contents || [])
+      .filter((c) => c.Key !== prefix)
+      .map((f) => ({
+        id: f.Key,
+        name: f.Key.replace(prefix, ""),
+        size: f.Size || 0,
+        createdAt: f.LastModified,
+        provider: "s3",
+        accountId: String(account._id),
+        accountEmail: account.email,
+        parentFolder: prefix || "/",
+      }));
+  }
+
+  return {
+    accountId: String(account._id),
+    provider: account.provider,
+    email: account.email,
+    folderId,
+    folderPath,
+    subfolders,
+    files,
+  };
+};

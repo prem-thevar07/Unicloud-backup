@@ -84,7 +84,7 @@ export const fetchDropboxFiles = async (account, pageToken = null, options = {})
       const body = {
         query: searchStr,
         options: {
-          max_results: options.pageSize ? Number(options.pageSize) : 20
+          max_results: options.pageSize ? Number(options.pageSize) : 100
         }
       };
       
@@ -103,7 +103,7 @@ export const fetchDropboxFiles = async (account, pageToken = null, options = {})
       let body = {
         path: options.folderPath || "",
         recursive: options.folderPath ? false : true,
-        limit: options.pageSize ? Number(options.pageSize) : 20
+        limit: options.pageSize ? Number(options.pageSize) : 100
       };
 
       if (pageToken) {
@@ -208,7 +208,7 @@ export const fetchDropboxFolders = async (account) => {
     const url = "https://api.dropboxapi.com/2/files/list_folder";
     const body = {
       path: "",
-      recursive: true,
+      recursive: false,
       limit: 100
     };
     const res = await makeDropboxRequest(account, url, body);

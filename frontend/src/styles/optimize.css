@@ -363,7 +363,19 @@
 
 .btn-opt-download:hover {
   background: rgba(16, 185, 129, 0.3);
-  border-color: #10b981;
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #ffffff;
+}
+
+.btn-opt-transfer {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #c084fc;
+}
+
+.btn-opt-transfer:hover {
+  background: rgba(168, 85, 247, 0.3);
+  border-color: rgba(168, 85, 247, 0.5);
   color: #ffffff;
 }
 
@@ -620,14 +632,6 @@
   border-color: rgba(168, 85, 247, 0.6);
   color: #ffffff;
   box-shadow: 0 0 18px rgba(168, 85, 247, 0.35);
-}
-
-.btn-no-more-pages {
-  background: rgba(16, 185, 129, 0.1) !important;
-  border-color: rgba(16, 185, 129, 0.3) !important;
-  color: #10b981 !important;
-  opacity: 0.85 !important;
-  cursor: default !important;
 }
 
 .pagination-info {

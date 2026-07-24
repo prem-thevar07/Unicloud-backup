@@ -4,7 +4,7 @@
 
 .file-manager-page {
   padding: 32px 40px;
-  max-width: 1400px;
+  max-width: 1680px;
   margin: 0 auto;
   color: var(--text-primary);
   width: 100%;
@@ -317,7 +317,7 @@
 /* ================= VERTICAL SPLIT EXPLORER LAYOUT ================= */
 .fm-split-layout {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 340px 1fr;
   gap: 28px;
   align-items: start;
   width: 100%;
@@ -497,10 +497,17 @@
 }
 
 /* ================= FILES LIST TABLE ================= */
+.fm-right-pane {
+  min-height: 640px;
+  display: flex;
+  flex-direction: column;
+}
+
 .fm-files-section {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 600px;
 }
 
 .fm-table-container {
@@ -508,6 +515,7 @@
   overflow-x: auto;
   overflow-y: auto;
   max-height: calc(100vh - 300px);
+  min-height: 520px;
   background: rgba(255, 255, 255, 0.01);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: var(--radius-xl);
@@ -1127,6 +1135,79 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 224px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.hover-explorer-sidebar-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-account-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.custom-account-checkbox:hover {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.custom-account-checkbox.checked {
+  background: #6366f1;
+  border-color: #6366f1;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+}
+
+.custom-account-checkbox .checkmark {
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.custom-folder-checkbox {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.custom-folder-checkbox:hover {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.custom-folder-checkbox.checked {
+  background: #6366f1;
+  border-color: #6366f1;
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.4);
+}
+
+.custom-folder-checkbox .checkmark {
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .hover-explorer-account-row {
@@ -1173,20 +1254,29 @@
   position: absolute;
   top: 0;
   width: 190px;
-  max-height: 380px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  max-height: 280px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
-  box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.4), 0 4px 12px -2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 16px 32px -4px rgba(0, 0, 0, 0.5), 0 4px 12px -2px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: flyoutFadeIn 0.1s ease forwards;
+  animation: flyoutSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
 }
 
-@keyframes flyoutFadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+@keyframes flyoutSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Invisible hover bridge — fills the gap between panels so the cursor
@@ -1194,10 +1284,10 @@
 .hover-explorer-flyout::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: -12px;
-  width: 12px;
-  height: 100%;
+  top: -30px;
+  bottom: -30px;
+  left: -35px;
+  width: 40px;
   background: transparent;
 }
 
@@ -1217,6 +1307,7 @@
 
 .hover-explorer-flyout .flyout-body {
   overflow-y: auto;
+  max-height: 235px;
   padding: 6px;
   display: flex;
   flex-direction: column;

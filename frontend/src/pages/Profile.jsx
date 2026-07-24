@@ -21,6 +21,37 @@ const Profile = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
+  // Clear Cache state
+  const [clearingCache, setClearingCache] = useState(false);
+
+  const handleClearAllCache = async () => {
+    setClearingCache(true);
+    try {
+      await API.post("/files/clear-cache").catch(() => {});
+      sessionStorage.clear();
+
+      const token = localStorage.getItem("token");
+      const user = localStorage.getItem("user");
+
+      localStorage.clear();
+
+      if (token) localStorage.setItem("token", token);
+      if (user) localStorage.setItem("user", user);
+
+      if ("caches" in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+      }
+
+      showToast("success", "Website cache cleared successfully! Fresh data synced.");
+    } catch (err) {
+      console.error("Clear cache error:", err);
+      showToast("error", "Failed to clear website cache.");
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
   // Unlinking confirmation modal
   const [unlinkAccount, setUnlinkAccount] = useState(null); // null or { id, provider, email }
   const [unlinking, setUnlinking] = useState(false);
@@ -542,6 +573,33 @@ const Profile = () => {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* SYSTEM MAINTENANCE & CACHE */}
+            <div className="profile-glass-card">
+              <h3>🧹 System Cache & Maintenance</h3>
+              <p style={{ color: "#94a3b8", fontSize: "0.9rem", marginBottom: "1.2rem", lineHeight: "1.5" }}>
+                Clear local browser storage, cached folder trees, session tokens, and backend file index caches to ensure 100% fresh data synchronization across all cloud drives.
+              </p>
+              <button
+                className="profile-btn-primary"
+                onClick={handleClearAllCache}
+                disabled={clearingCache}
+                style={{
+                  background: "linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%)",
+                  border: "1px solid rgba(99, 102, 241, 0.4)",
+                  color: "#ffffff",
+                  fontWeight: "600",
+                  padding: "0.75rem 1.4rem",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.6rem"
+                }}
+              >
+                {clearingCache ? "🧹 Clearing Cache..." : "🧹 Clear Website Cache"}
+              </button>
             </div>
 
             {/* DANGER ZONE (ACCOUNT DELETION) */}

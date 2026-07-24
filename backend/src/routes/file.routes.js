@@ -1,9 +1,35 @@
 import express from "express";
 import authMiddleware from "../middleware/auth.middleware.js";
-import { getAllFiles, getAllFolders, deleteFile } from "../services/fileAggregator.service.js";
+import { getAllFiles, getAllFolders, getExplorerContents, deleteFile } from "../services/fileAggregator.service.js";
 import { logActivity } from "../utils/activityLogger.js";
 
 const router = express.Router();
+
+router.get("/explorer-contents", authMiddleware, async (req, res) => {
+  try {
+    const { accountId, folderId, folderPath } = req.query;
+    if (!accountId) {
+      return res.status(400).json({ error: "accountId is required" });
+    }
+    const data = await getExplorerContents(req.user.id, accountId, folderId, folderPath);
+    res.json(data);
+  } catch (err) {
+    console.error("❌ explorer-contents error:", err.message);
+    res.status(500).json({ error: err.message || "Failed to fetch explorer contents" });
+  }
+});
+
+router.post("/clear-cache", authMiddleware, async (req, res) => {
+  try {
+    const { fileCache } = await import("../utils/cache.js");
+    fileCache.clear();
+    console.log("🧹 Backend fileCache cleared via API request for user:", req.user.id);
+    res.json({ success: true, message: "Backend cache cleared successfully" });
+  } catch (err) {
+    console.error("Clear cache error:", err.message);
+    res.status(500).json({ error: "Failed to clear backend cache" });
+  }
+});
 
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {

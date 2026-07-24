@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getFiles } from "../services/fileService";
+import { getFiles, getExplorerContents } from "../services/fileService";
 import api from "../config/api";
 import "../styles/files.css";
 import MainLayout from "../layouts/MainLayout";
@@ -96,12 +96,14 @@ const getFileOpenUrl = (file) => {
 };
 
 const getThumbnailSrc = (file) => {
-  if (!file || !file.thumbnail) return null;
-  if (file.thumbnail.startsWith("/api/")) {
+  if (!file) return null;
+  const rawThumb = file.thumbnail || file.thumbnailLink || (file.type === "image" ? file.url || file.webContentLink : null);
+  if (!rawThumb) return null;
+  if (rawThumb.startsWith("/api/")) {
     const token = localStorage.getItem("token");
-    return `${getCleanApiUrl(file.thumbnail)}&token=${encodeURIComponent(token)}`;
+    return `${getCleanApiUrl(rawThumb)}&token=${encodeURIComponent(token)}`;
   }
-  return file.thumbnail;
+  return rawThumb;
 };
 
 
@@ -175,6 +177,151 @@ const SkeletonRow = () => (
 );
 
 /* ===============================
+   RECURSIVE FOLDER TREE NODE COMPONENT
+=============================== */
+const RecursiveFolderTreeNode = ({
+  folder,
+  level = 1,
+  selectedFolderFilters = [],
+  toggleFolderCheckbox,
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [childrenData, setChildrenData] = useState(null);
+
+  const isFolderActive = selectedFolderFilters.some(sf => sf.id === folder.id);
+
+  const toggleExpand = async (e) => {
+    e.stopPropagation();
+
+    if (!isExpanded && !childrenData && folder.id !== "root") {
+      setIsLoading(true);
+      try {
+        const res = await getExplorerContents({
+          accountId: folder.accountId,
+          folderId: folder.id,
+          folderPath: folder.path || folder.name,
+        });
+        setChildrenData({
+          subfolders: res.subfolders || [],
+          files: res.files || [],
+        });
+      } catch (err) {
+        console.error("Error fetching child node content:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    setIsExpanded((prev) => !prev);
+  };
+
+  return (
+    <div className="tree-node-group" style={{ display: "flex", flexDirection: "column" }}>
+      <div
+        className={`folder-list-item nested ${isFolderActive ? "active" : ""}`}
+        onClick={toggleExpand}
+        style={{
+          paddingLeft: `${level * 14 + 10}px`,
+          paddingTop: "6px",
+          paddingBottom: "6px",
+          borderRadius: "var(--radius-md)",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          cursor: "pointer",
+        }}
+      >
+        <span
+          className="node-expand-arrow"
+          style={{ fontSize: "10px", color: "var(--text-muted)", width: "12px" }}
+        >
+          {isLoading ? "⌛" : isExpanded ? "▼" : "▶"}
+        </span>
+        <div 
+          className={`custom-folder-checkbox ${isFolderActive ? "checked" : ""}`}
+          onClick={(e) => toggleFolderCheckbox(e, folder)}
+          title={isFolderActive ? "Uncheck folder filter" : "Check to multi-select folder"}
+        >
+          {isFolderActive && <span className="checkmark">✓</span>}
+        </div>
+        <span className="folder-small-icon" style={{ fontSize: "15px" }}>
+          📁
+        </span>
+        <div className="folder-item-info" style={{ flex: 1, minWidth: 0 }}>
+          <h4 style={{ fontSize: "12px", fontWeight: "500" }} className="truncate" title={folder.name}>
+            {folder.name}
+          </h4>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="tree-children-container" style={{ display: "flex", flexDirection: "column" }}>
+          {isLoading && (
+            <div style={{ paddingLeft: `${(level + 1) * 14 + 10}px`, fontSize: "11px", color: "var(--text-muted)", padding: "4px 0" }}>
+              Loading...
+            </div>
+          )}
+
+          {!isLoading &&
+            childrenData?.subfolders.map((sub) => (
+              <RecursiveFolderTreeNode
+                key={sub.id}
+                folder={sub}
+                level={level + 1}
+                selectedFolderFilters={selectedFolderFilters}
+                toggleFolderCheckbox={toggleFolderCheckbox}
+              />
+            ))}
+
+          {!isLoading &&
+            childrenData?.files.map((file) => (
+              <div
+                key={file.id}
+                className="tree-file-node-item"
+                style={{
+                  paddingLeft: `${(level + 1) * 14 + 18}px`,
+                  paddingTop: "4px",
+                  paddingBottom: "4px",
+                  fontSize: "11.5px",
+                  color: "#cbd5e1",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  cursor: "default",
+                }}
+              >
+                <span style={{ fontSize: "12px" }}>📄</span>
+                <span className="truncate" title={file.name} style={{ flex: 1 }}>
+                  {file.name}
+                </span>
+              </div>
+            ))}
+
+          {!isLoading && childrenData && childrenData.subfolders.length === 0 && childrenData.files.length === 0 && (
+            <div
+              style={{
+                paddingLeft: `${(level + 1) * 14 + 18}px`,
+                paddingTop: "4px",
+                paddingBottom: "4px",
+                fontSize: "11.5px",
+                color: "#94a3b8",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <span>🚫</span>
+              <span>Empty Folder</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ===============================
    MAIN COMPONENT
 =============================== */
 const Files = () => {
@@ -192,16 +339,13 @@ const Files = () => {
   // Custom design states
   const [viewMode, setViewMode] = useState("list"); // "list" | "grid"
   const [selectedFileIds, setSelectedFileIds] = useState([]);
-  const [activeFolderFilter, setActiveFolderFilter] = useState(null); // { id, name, path, accountId, provider }
+  const [selectedFolderFilters, setSelectedFolderFilters] = useState([]); // Array of selected folder objects [{ id, name, path, accountId, provider }]
   const [expandedAccountId, setExpandedAccountId] = useState(null);
-  const [foldersByAccount, setFoldersByAccount] = useState(() => {
-    try {
-      const cached = localStorage.getItem("unicloud_cached_folders");
-      return cached ? JSON.parse(cached) : {};
-    } catch (_) {
-      return {};
-    }
-  });
+  const [foldersByAccount, setFoldersByAccount] = useState({});
+  const [explorerSubfolders, setExplorerSubfolders] = useState([]);
+  const [explorerBreadcrumbs, setExplorerBreadcrumbs] = useState([
+    { id: "root", name: "My Drive", path: "/" }
+  ]);
   const [foldersLoading, setFoldersLoading] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
     const [sortOption, setSortOption] = useState("newest");
@@ -248,7 +392,14 @@ const Files = () => {
   const isFetchingRef = useRef(false);
   const [searchParams] = useSearchParams();
 
-    // Load account filter from URL parameters if navigated from Dashboard
+  // Clear old stale folder cache from localStorage automatically on mount
+  useEffect(() => {
+    try {
+      localStorage.removeItem("unicloud_cached_folders");
+    } catch (_) {}
+  }, []);
+
+  // Load account filter from URL parameters if navigated from Dashboard
   useEffect(() => {
     const accountIdParam = searchParams.get("accountId");
     if (accountIdParam) {
@@ -261,34 +412,20 @@ const Files = () => {
     if (accounts && accounts.length > 0) {
       accounts.forEach((acc) => {
         const preloadFolders = async () => {
+          const accIdStr = String(acc._id);
           try {
-            const res = await api.get(`/files/folders?accountId=${acc._id}`);
-            let accountFolders = res.data || [];
-            
-            if (accountFolders.length === 0) {
-              const seen = new Set();
-              files.forEach(f => {
-                if (String(f.accountId) === String(acc._id)) {
-                  const path = getFileVirtualPath(f);
-                  const folderName = path.startsWith("/") ? path.slice(1) : path;
-                  if (folderName && !seen.has(folderName)) {
-                    seen.add(folderName);
-                    accountFolders.push({
-                      id: folderName,
-                      name: folderName,
-                      path: path,
-                      provider: f.provider,
-                      accountId: f.accountId,
-                      accountEmail: f.accountEmail || (f.provider === "google" ? "Google Drive" : f.provider === "dropbox" ? "Dropbox" : "OneDrive"),
-                      isVirtual: true
-                    });
-                  }
-                }
-              });
-            }
+            const res = await api.get(`/files/folders?accountId=${accIdStr}`);
+            let remoteFolders = Array.isArray(res.data) ? res.data : [];
+            const rootItem = { id: "root", name: "Root / All Files", path: "/", provider: acc.provider, accountId: accIdStr };
+            const hasRoot = remoteFolders.some(f => f.id === "root" || f.name === "Root / All Files");
+            let accountFolders = hasRoot ? remoteFolders : [rootItem, ...remoteFolders];
 
             setFoldersByAccount(prev => {
-              const updated = { ...prev, [acc._id]: accountFolders };
+              const updated = {
+                ...prev,
+                [accIdStr]: accountFolders,
+                [acc._id]: accountFolders,
+              };
               try {
                 localStorage.setItem("unicloud_cached_folders", JSON.stringify(updated));
               } catch (_) {}
@@ -317,7 +454,7 @@ const Files = () => {
     // Fetch when filters update
   useEffect(() => {
     fetchData();
-  }, [debouncedSearch, timeline, customStartDate, customEndDate, activeFolderFilter, selectedAccounts]);
+  }, [debouncedSearch, timeline, customStartDate, customEndDate, selectedFolderFilters, selectedAccounts]);
 
   useEffect(() => {
     applyFilters(false); // Don't reset pagination when just appending files
@@ -325,7 +462,7 @@ const Files = () => {
 
   useEffect(() => {
     applyFilters(true); // Reset pagination when filters change
-  }, [activeCategory, activeSubCategory, search, selectedAccounts, activeFolderFilter, sortOption]);
+  }, [activeCategory, activeSubCategory, search, selectedAccounts, selectedFolderFilters, sortOption]);
 
 
 
@@ -366,12 +503,57 @@ const Files = () => {
     return { startDateStr, endDateStr };
   };
 
-        const fetchData = async () => {
+  const fetchDeepFolderFiles = async (sf) => {
+    let allFolderFiles = [];
+    const queue = [{ id: sf.id, path: sf.path || sf.name }];
+    const visited = new Set();
+    let depth = 0;
+    const maxDepth = 4;
+
+    while (queue.length > 0 && depth < maxDepth) {
+      const currentBatch = queue.splice(0, queue.length);
+      depth++;
+
+      const promises = currentBatch.map(async (item) => {
+        if (visited.has(item.id)) return;
+        visited.add(item.id);
+
+        try {
+          const res = await getExplorerContents({
+            accountId: sf.accountId,
+            folderId: item.id,
+            folderPath: item.path
+          });
+
+          if (res.files && res.files.length > 0) {
+            allFolderFiles.push(...res.files);
+          }
+
+          if (res.subfolders && res.subfolders.length > 0) {
+            res.subfolders.forEach(sub => {
+              if (sub.id && !visited.has(sub.id)) {
+                queue.push({ id: sub.id, path: sub.path || sub.name });
+              }
+            });
+          }
+        } catch (err) {
+          console.error("Deep folder fetch error:", err);
+        }
+      });
+
+      await Promise.all(promises);
+    }
+
+    return allFolderFiles;
+  };
+
+  const fetchData = async () => {
     setLoading(true);
     try {
-                  const getFilesParams = {
+      const getFilesParams = {
         view: "unified",
         mode: "all",
+        pageSize: 100,
         search: debouncedSearch
       };
 
@@ -379,25 +561,56 @@ const Files = () => {
         getFilesParams.accounts = selectedAccounts.join(",");
       }
 
-      // For true cloud search, we search globally if search query is active (ignore folder/timeline query bounds)
-      if (!debouncedSearch) {
-        if (activeFolderFilter && !activeFolderFilter.isVirtual) {
-          getFilesParams.folderId = activeFolderFilter.id;
-          getFilesParams.folderPath = activeFolderFilter.path;
-          getFilesParams.folderAccountId = activeFolderFilter.accountId;
-        } else {
-          const { startDateStr, endDateStr } = getTimelineDates();
-          if (startDateStr) getFilesParams.startDate = startDateStr;
-          if (endDateStr) getFilesParams.endDate = endDateStr;
-        }
-      }
+      // If specific folders are selected in multi-select mode, fetch files directly from those folders AND their subfolders!
+      const activeFolders = selectedFolderFilters.filter(sf => sf && sf.id && sf.id !== "root");
+      if (activeFolders.length > 0 && !debouncedSearch) {
+        const folderPromises = activeFolders.map(sf => fetchDeepFolderFiles(sf));
+        
+        const [accountsRes, ...folderResults] = await Promise.all([
+          api.get("/accounts").catch(() => ({ data: [] })),
+          ...folderPromises
+        ]);
 
+        const combinedFiles = folderResults.flatMap(filesArr => filesArr || []);
+        const uniqueFilesMap = new Map();
+        combinedFiles.forEach(f => {
+          if (f && f.id && !uniqueFilesMap.has(f.id)) {
+            uniqueFilesMap.set(f.id, {
+              ...f,
+              accountId: f.accountId || activeFolders[0]?.accountId
+            });
+          }
+        });
+
+        const folderFiles = Array.from(uniqueFilesMap.values());
+
+        setFiles(folderFiles);
+        const fetchedAccounts = accountsRes.data || [];
+        setAccounts(fetchedAccounts);
+        try {
+          localStorage.setItem("unicloud_cached_accounts", JSON.stringify(fetchedAccounts));
+        } catch (_) {}
+        return;
+      }
 
       // Fetch files and accounts in parallel
       const [filesRes, accountsRes] = await Promise.all([
         getFiles(getFilesParams),
         api.get("/accounts").catch(() => ({ data: [] }))
       ]);
+
+      if (selectedAccounts.length === 1) {
+        const targetAccId = selectedAccounts[0];
+        const targetFolderId = activeFolderFilter ? activeFolderFilter.id : "root";
+        const targetFolderPath = activeFolderFilter ? (activeFolderFilter.path || activeFolderFilter.name) : "/";
+        getExplorerContents({ accountId: targetAccId, folderId: targetFolderId, folderPath: targetFolderPath })
+          .then((res) => {
+            setExplorerSubfolders(res.subfolders || []);
+          })
+          .catch(() => setExplorerSubfolders([]));
+      } else {
+        setExplorerSubfolders([]);
+      }
 
       const allFiles = [
         ...(filesRes.data?.image || []),
@@ -504,15 +717,29 @@ const Files = () => {
       }
     }
 
-            // Filter by account
+    // Filter by account
     if (selectedAccounts.length > 0) {
-      data = data.filter((f) => selectedAccounts.includes(String(f.accountId)));
+      data = data.filter((f) => {
+        const fileAccId = String(f.accountId || f.account_id || "");
+        return selectedAccounts.some(accId => String(accId) === fileAccId);
+      });
     }
 
-
-        // Filter by virtual folder local path matching
-    if (activeFolderFilter && activeFolderFilter.isVirtual && !search) {
-      data = data.filter((f) => getFileVirtualPath(f) === activeFolderFilter.path);
+    // Filter by selected folder filters during search mode
+    const hasNonRootFolders = selectedFolderFilters.some(sf => sf && sf.id && sf.id !== "root");
+    if (hasNonRootFolders && search) {
+      data = data.filter((f) => {
+        return selectedFolderFilters.some(sf => {
+          if (!sf || sf.id === "root") return true;
+          if (sf.isVirtual) {
+            return getFileVirtualPath(f) === sf.path;
+          }
+          const fFolderId = String(f.folderId || f.folder_id || f.parentFolderId || (f.parents && f.parents[0]) || "");
+          const fPath = f.path || getFileVirtualPath(f) || "";
+          const sfPath = sf.path || sf.name || "";
+          return (sf.id && fFolderId === String(sf.id)) || (sfPath && sfPath !== "/" && fPath.startsWith(sfPath));
+        });
+      });
     }
 
 
@@ -586,57 +813,44 @@ const Files = () => {
   const totalUsedStorage = accounts.reduce((accSum, a) => accSum + (a.storage?.used || 0), 0);
   const totalTotalStorage = accounts.reduce((accSum, a) => accSum + (a.storage?.total || 15 * 1024 * 1024 * 1024), 0);
 
-          // Account Click & Collapsible expansion
-    const handleAccountClick = async (accountId) => {
-    setActiveFolderFilter(null);
-    setSelectedAccounts(prev => 
-      prev.includes(accountId) 
-        ? prev.filter(id => id !== accountId) 
-        : [...prev, accountId]
-    );
-    
-    if (expandedAccountId === accountId) {
-      setExpandedAccountId(null);
-      return;
-    }
-    
-    setExpandedAccountId(accountId);
-    
+  // Account Click (Single Select)
+  const handleAccountClick = (accountId) => {
+    setSelectedFolderFilters([]);
+    setSelectedAccounts([accountId]);
+    setExpandedAccountId(prev => (prev === accountId ? null : accountId));
     if (!foldersByAccount[accountId]) {
-      setFoldersLoading(true);
       loadFoldersForAccount(accountId);
     }
   };
 
-  const loadFoldersForAccount = async (accountId) => {
-    try {
-      const res = await api.get(`/files/folders?accountId=${accountId}`);
-      let accountFolders = res.data || [];
-      
-      if (accountFolders.length === 0) {
-        const seen = new Set();
-        files.forEach(f => {
-          if (String(f.accountId) === String(accountId)) {
-            const path = getFileVirtualPath(f);
-            const folderName = path.startsWith("/") ? path.slice(1) : path;
-            if (folderName && !seen.has(folderName)) {
-              seen.add(folderName);
-              accountFolders.push({
-                id: folderName,
-                name: folderName,
-                path: path,
-                provider: f.provider,
-                accountId: f.accountId,
-                accountEmail: f.accountEmail || (f.provider === "google" ? "Google Drive" : f.provider === "dropbox" ? "Dropbox" : "OneDrive"),
-                isVirtual: true
-              });
-            }
-          }
-        });
+  // Account Checkbox Toggle (Multi-Select)
+  const toggleAccountCheckbox = (e, accountId) => {
+    e.stopPropagation();
+    setSelectedFolderFilters([]);
+    setSelectedAccounts(prev => {
+      if (prev.includes(accountId)) {
+        const next = prev.filter(id => id !== accountId);
+        return next.length === 0 ? [accountId] : next;
+      } else {
+        return [...prev, accountId];
       }
-      
+    });
+  };
+
+  const loadFoldersForAccount = async (accountId) => {
+    const accIdStr = String(accountId);
+    setFoldersLoading(true);
+    try {
+      const acc = accounts.find(a => String(a._id) === accIdStr);
+      const provider = acc ? acc.provider : "cloud";
+      const res = await api.get(`/files/folders?accountId=${accIdStr}`);
+      let remoteFolders = Array.isArray(res.data) ? res.data : [];
+      const rootItem = { id: "root", name: "Root / All Files", path: "/", provider, accountId: accIdStr };
+      const hasRoot = remoteFolders.some(f => f.id === "root" || f.name === "Root / All Files");
+      let accountFolders = hasRoot ? remoteFolders : [rootItem, ...remoteFolders];
+
       setFoldersByAccount(prev => {
-        const updated = { ...prev, [accountId]: accountFolders };
+        const updated = { ...prev, [accIdStr]: accountFolders };
         try {
           localStorage.setItem("unicloud_cached_folders", JSON.stringify(updated));
         } catch (_) {}
@@ -650,9 +864,21 @@ const Files = () => {
   };
 
 
-    // Folder Click toggle
-  const handleFolderClick = (folder) => {
-    setActiveFolderFilter(activeFolderFilter && activeFolderFilter.id === folder.id ? null : folder);
+  // Folder Checkbox Multi-Select Toggle
+  const toggleFolderCheckbox = (e, folderObj) => {
+    if (e) e.stopPropagation();
+    if (!folderObj) {
+      setSelectedFolderFilters([]);
+      return;
+    }
+    setSelectedFolderFilters(prev => {
+      const exists = prev.some(f => f.id === folderObj.id);
+      if (exists) {
+        return prev.filter(f => f.id !== folderObj.id);
+      } else {
+        return [...prev, folderObj];
+      }
+    });
   };
 
   // Reset all filters
@@ -665,7 +891,7 @@ const Files = () => {
     setCustomStartDate("");
     setCustomEndDate("");
     setSelectedAccounts([]);
-    setActiveFolderFilter(null);
+    setSelectedFolderFilters([]);
     setExpandedAccountId(null);
     setSortOption("newest");
   };
@@ -952,19 +1178,32 @@ const Files = () => {
 
   // Ref to debounce hover-off so flyouts don't vanish during mouse travel
   const hoverLeaveTimer = useRef(null);
+  const hoverEnterTimer = useRef(null);
 
-  const cancelHoverLeave = () => {
+  const cancelHoverTimers = () => {
     if (hoverLeaveTimer.current) {
       clearTimeout(hoverLeaveTimer.current);
       hoverLeaveTimer.current = null;
     }
+    if (hoverEnterTimer.current) {
+      clearTimeout(hoverEnterTimer.current);
+      hoverEnterTimer.current = null;
+    }
+  };
+
+  const cancelHoverLeave = () => {
+    cancelHoverTimers();
   };
 
   const scheduleHoverLeave = () => {
+    if (hoverEnterTimer.current) {
+      clearTimeout(hoverEnterTimer.current);
+      hoverEnterTimer.current = null;
+    }
     cancelHoverLeave();
     hoverLeaveTimer.current = setTimeout(() => {
       setHoveredPath([]);
-    }, 350);
+    }, 650);
   };
 
   // Helper: get Y offset of an element relative to the hover container
@@ -973,7 +1212,7 @@ const Files = () => {
     if (!containerEl || !el) return 0;
     const containerRect = containerEl.getBoundingClientRect();
     const elRect = el.getBoundingClientRect();
-    return elRect.top - containerRect.top;
+    return Math.max(0, elRect.top - containerRect.top);
   };
 
   // Plain render function (NOT a component) so React diffs the output
@@ -994,22 +1233,44 @@ const Files = () => {
             return (
               <div 
                 key={acc._id} 
-                className={`hover-explorer-account-row ${isHovered ? "hovered" : ""}`}
+                className={`hover-explorer-account-row ${isHovered ? "hovered" : ""} ${selectedAccounts.includes(acc._id) ? "selected" : ""}`}
                 onMouseEnter={(e) => {
-                  cancelHoverLeave();
-                  const top = getRelativeTop(e.currentTarget);
-                  if (!foldersByAccount[acc._id]) {
-                    loadFoldersForAccount(acc._id);
+                  cancelHoverTimers();
+                  if (hoveredPath.length > 0 && hoveredPath[0].id !== acc._id) {
+                    setHoveredPath([]);
+                    setFlyoutTops([]);
                   }
-                  const children = getAccountTree(acc);
-                  setFlyoutTops([top]);
-                  setHoveredPath([{ level: 0, id: acc._id, name: acc.email, type: "account", children }]);
+                  if (hoveredPath.length > 0 && hoveredPath[0].id === acc._id) {
+                    return;
+                  }
+                  const currentTarget = e.currentTarget;
+                  hoverEnterTimer.current = setTimeout(() => {
+                    const top = getRelativeTop(currentTarget);
+                    if (!foldersByAccount[acc._id]) {
+                      loadFoldersForAccount(acc._id);
+                    }
+                    const children = getAccountTree(acc);
+                    setFlyoutTops([top]);
+                    setHoveredPath([{ level: 0, id: acc._id, name: acc.email, type: "account", children }]);
+                  }, 150);
+                }}
+                onMouseLeave={() => {
+                  if (hoverEnterTimer.current) {
+                    clearTimeout(hoverEnterTimer.current);
+                    hoverEnterTimer.current = null;
+                  }
                 }}
                 onClick={() => {
                   handleAccountClick(acc._id);
-                  setActiveFolderFilter(null);
                 }}
               >
+                <div 
+                  className={`custom-account-checkbox ${selectedAccounts.includes(acc._id) ? "checked" : ""}`}
+                  onClick={(e) => toggleAccountCheckbox(e, acc._id)}
+                  title={selectedAccounts.includes(acc._id) ? "Uncheck account filter" : "Check to multi-select account"}
+                >
+                  {selectedAccounts.includes(acc._id) && <span className="checkmark">✓</span>}
+                </div>
                 <span className="folder-badge-logo font-provider-icon">
                   <img src={providerIcons[acc.provider]} alt={acc.provider} />
                 </span>
@@ -1033,7 +1294,7 @@ const Files = () => {
               key={level}
               className="hover-explorer-flyout glass"
               style={{
-                left: `${200 + level * 200}px`,
+                left: `${205 + level * 175}px`,
                 top: `${flyoutTops[level] ?? 0}px`,
                 zIndex: 100 + level
               }}
@@ -1044,58 +1305,124 @@ const Files = () => {
                 <span>{item.name}</span>
               </div>
               <div className="flyout-body">
-                {children.map(child => {
-                  const isFolder = child.type === "folder";
-                  const isChildHovered = hoveredPath.length > level + 1 && hoveredPath[level + 1].id === child.id;
-                  
-                  return (
-                    <div
-                      key={child.id}
-                      className={`flyout-item ${isFolder ? "folder-item" : "file-item"} ${isChildHovered ? "active" : ""}`}
-                      onMouseEnter={(e) => {
-                        cancelHoverLeave();
-                        if (isFolder) {
-                          const top = getRelativeTop(e.currentTarget);
-                          const newPath = hoveredPath.slice(0, level + 1);
-                          newPath.push({
-                            level: level + 1,
-                            id: child.id,
-                            name: child.name,
-                            type: "folder",
-                            children: child.children
-                          });
-                          setFlyoutTops(prev => {
-                            const next = prev.slice(0, level + 1);
-                            next[level + 1] = top;
-                            return next;
-                          });
-                          setHoveredPath(newPath);
-                        } else {
-                          setHoveredPath(hoveredPath.slice(0, level + 1));
-                        }
-                      }}
-                      onClick={() => {
-                        if (isFolder) {
-                          handleFolderClick({
-                            id: child.id,
-                            name: child.name,
-                            path: child.path,
-                            provider: child.provider,
-                            accountId: child.accountId
-                          });
-                        } else {
-                          if (child.fileObj) {
+                {item.childrenLoaded && children.length === 0 ? (
+                  <div style={{ padding: "14px 10px", textAlign: "center", color: "#94a3b8", fontSize: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "14px" }}>🚫</span>
+                    <span>Empty Folder</span>
+                  </div>
+                ) : (
+                  children.map(child => {
+                    const isFolder = child.type === "folder";
+                    const isChildEmpty = isFolder && child.childrenLoaded && (child.children || []).length === 0;
+                    const isChildHovered = hoveredPath.length > level + 1 && hoveredPath[level + 1].id === child.id;
+                    
+                    return (
+                      <div
+                        key={child.id}
+                        className={`flyout-item ${isFolder ? "folder-item" : "file-item"} ${isChildHovered ? "active" : ""}`}
+                        onMouseEnter={(e) => {
+                          cancelHoverTimers();
+                          const currentTarget = e.currentTarget;
+                          if (isFolder) {
+                            if (hoveredPath.length > level + 1 && hoveredPath[level + 1].id === child.id) {
+                              return;
+                            }
+                            hoverEnterTimer.current = setTimeout(async () => {
+                              const top = getRelativeTop(currentTarget);
+                              
+                              if (!child.childrenLoaded && child.id !== "root") {
+                                try {
+                                  const res = await getExplorerContents({
+                                    accountId: child.accountId,
+                                    folderId: child.id,
+                                    folderPath: child.path || child.name,
+                                  });
+
+                                  const childFolders = (res.subfolders || []).map(f => ({
+                                    id: f.id,
+                                    name: f.name,
+                                    type: "folder",
+                                    path: f.path || `/${f.name}`,
+                                    accountId: f.accountId,
+                                    provider: f.provider,
+                                    children: []
+                                  }));
+
+                                  const childFiles = (res.files || []).map(f => ({
+                                    id: f.id,
+                                    name: f.name,
+                                    type: "file",
+                                    path: f.path || "/",
+                                    size: f.size,
+                                    createdAt: f.createdAt,
+                                    provider: f.provider,
+                                    accountId: f.accountId,
+                                    fileObj: f
+                                  }));
+
+                                  child.children = [...childFolders, ...childFiles];
+                                  child.childrenLoaded = true;
+                                } catch (err) {
+                                  console.error("Flyout child fetch error:", err);
+                                }
+                              }
+
+                              const newPath = hoveredPath.slice(0, level + 1);
+                              newPath.push({
+                                level: level + 1,
+                                id: child.id,
+                                name: child.name,
+                                type: "folder",
+                                children: child.children || []
+                              });
+                              setFlyoutTops(prev => {
+                                const next = prev.slice(0, level + 1);
+                                next[level + 1] = prev[0] ?? top;
+                                return next;
+                              });
+                              setHoveredPath(newPath);
+                            }, 120);
+                          } else {
+                            hoverEnterTimer.current = setTimeout(() => {
+                              setHoveredPath(hoveredPath.slice(0, level + 1));
+                            }, 120);
+                          }
+                        }}
+                        onClick={() => {
+                          if (!isFolder && child.fileObj) {
                             window.open(getFileOpenUrl(child.fileObj), "_blank");
                           }
-                        }
-                      }}
-                    >
-                      <span className="icon">{isFolder ? "📁" : "📄"}</span>
-                      <span className="name truncate" title={child.name}>{child.name}</span>
-                      {isFolder && <span className="arrow">▶</span>}
-                    </div>
-                  );
-                })}
+                        }}
+                      >
+                        <span className="icon">{isFolder ? (isChildEmpty ? "📂" : "📁") : "📄"}</span>
+                        {isFolder && (() => {
+                          const isChildChecked = selectedFolderFilters.some(sf => sf.id === child.id);
+                          return (
+                            <div 
+                              className={`custom-folder-checkbox ${isChildChecked ? "checked" : ""}`}
+                              onClick={(e) => toggleFolderCheckbox(e, {
+                                id: child.id,
+                                name: child.name,
+                                path: child.path,
+                                provider: child.provider,
+                                accountId: child.accountId
+                              })}
+                              title={isChildChecked ? "Uncheck folder filter" : "Check to multi-select folder"}
+                            >
+                              {isChildChecked && <span className="checkmark">✓</span>}
+                            </div>
+                          );
+                        })()}
+                        <span className="name truncate" title={child.name}>{child.name}</span>
+                        {isFolder && (
+                          <span className="arrow" style={{ fontSize: isChildEmpty ? "12px" : "10px", opacity: isChildEmpty ? 0.8 : 0.4 }}>
+                            {isChildEmpty ? "🚫" : "▶"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           );
@@ -1550,12 +1877,11 @@ const Files = () => {
                 <h3>Accounts <span className="item-count">{accounts.length}</span></h3>
                 <button 
                   className="show-all-btn" 
-                                    onClick={() => {
+                  onClick={() => {
                     setSelectedAccounts([]);
                     setExpandedAccountId(null);
-                    setActiveFolderFilter(null);
+                    setSelectedFolderFilters([]);
                   }}
-
                 >
                   All Files
                 </button>
@@ -1596,6 +1922,13 @@ const Files = () => {
                         className={`folder-list-item account-row ${isAccountSelected ? "active" : ""}`}
                         onClick={() => handleAccountClick(acc._id)}
                       >
+                        <div 
+                          className={`custom-account-checkbox ${isAccountSelected ? "checked" : ""}`}
+                          onClick={(e) => toggleAccountCheckbox(e, acc._id)}
+                          title={isAccountSelected ? "Uncheck account filter" : "Check to multi-select account"}
+                        >
+                          {isAccountSelected && <span className="checkmark">✓</span>}
+                        </div>
                         <span className="folder-badge-logo font-provider-icon">
                           <img src={providerIcons[acc.provider]} alt={acc.provider} />
                         </span>
@@ -1615,25 +1948,15 @@ const Files = () => {
                               Loading folders...
                             </div>
                           )}
-                          {!foldersLoading && accountFolders.map(folder => {
-                            const isFolderActive = activeFolderFilter && activeFolderFilter.id === folder.id;
-                            return (
-                              <div 
-                                key={folder.id}
-                                className={`folder-list-item nested ${isFolderActive ? "active" : ""}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleFolderClick(folder);
-                                }}
-                                style={{ padding: "6px 12px", borderRadius: "var(--radius-md)" }}
-                              >
-                                <span className="folder-small-icon" style={{ fontSize: "16px" }}>📁</span>
-                                <div className="folder-item-info">
-                                  <h4 style={{ fontSize: "12px", fontWeight: "500" }}>{folder.name}</h4>
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {!foldersLoading && accountFolders.map(folder => (
+                            <RecursiveFolderTreeNode
+                              key={folder.id}
+                              folder={folder}
+                              level={1}
+                              selectedFolderFilters={selectedFolderFilters}
+                              toggleFolderCheckbox={toggleFolderCheckbox}
+                            />
+                          ))}
                           {!foldersLoading && accountFolders.length === 0 && (
                             <div className="nested-empty" style={{ fontSize: "12px", color: "var(--text-muted)", padding: "6px 12px" }}>
                               No folders found.
@@ -1991,36 +2314,42 @@ const Files = () => {
                       onClick={() => isSelectMode && toggleSelectFile(file.id)}
                       style={{ cursor: isSelectMode ? "pointer" : "default" }}
                     >
-                                                                  {isSelectMode && (
+                      {isSelectMode && (
                         <div className="grid-card-checkbox" onClick={(e) => { e.stopPropagation(); toggleSelectFile(file.id); }}>
                           <div className={`custom-card-checkbox ${isSelected ? "checked" : ""}`} />
                         </div>
                       )}
 
-
-                                            <div className="grid-card-icon-area" style={{ background: config.bg + "15" }}>
-                                                {file.thumbnail ? (
-                          <img 
-                            src={getThumbnailSrc(file)} 
-                            alt={file.name} 
-                            className="grid-card-thumbnail"
-
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                              const fallbackIcon = e.currentTarget.nextSibling;
-                              if (fallbackIcon) fallbackIcon.style.display = "inline";
-                            }}
-                          />
-                        ) : null}
-                        <span 
-                          className="grid-card-icon" 
-                          style={{ 
-                            color: config.bg,
-                            display: file.thumbnail ? "none" : "inline" 
-                          }}
-                        >
-                          {config.icon}
-                        </span>
+                      <div className="grid-card-icon-area" style={{ background: config.bg + "15" }}>
+                        {(() => {
+                          const thumbSrc = getThumbnailSrc(file);
+                          return (
+                            <>
+                              {thumbSrc ? (
+                                <img 
+                                  src={thumbSrc} 
+                                  alt={file.name} 
+                                  className="grid-card-thumbnail"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                    const fallbackIcon = e.currentTarget.nextSibling;
+                                    if (fallbackIcon) fallbackIcon.style.display = "inline";
+                                  }}
+                                />
+                              ) : null}
+                              <span 
+                                className="grid-card-icon" 
+                                style={{ 
+                                  color: config.bg,
+                                  display: thumbSrc ? "none" : "inline" 
+                                }}
+                              >
+                                {config.icon}
+                              </span>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       <div className="grid-card-info">

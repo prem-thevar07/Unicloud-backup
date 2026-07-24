@@ -53,7 +53,7 @@ const makeOneDriveRequest = async (account, url, method = "GET", data = null, he
 
 export const fetchOneDriveFiles = async (account, pageToken = null, options = {}) => {
   try {
-    const pageSize = options.pageSize ? Number(options.pageSize) : 20;
+    const pageSize = options.pageSize ? Number(options.pageSize) : 100;
     
     // Default to delta query for recursive file indexing across all folders
     let url = "https://graph.microsoft.com/v1.0/me/drive/root/delta";

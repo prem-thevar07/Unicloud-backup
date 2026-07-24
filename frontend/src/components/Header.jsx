@@ -101,6 +101,9 @@ const Header = () => {
               <Link to="/optimize" className={`nav-item ${isActive("/optimize") ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
                 Optimize
               </Link>
+              <Link to="/transfer" className={`nav-item ${isActive("/transfer") ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
+                Transfer
+              </Link>
               <Link to="/manage-accounts" className={`nav-item ${isActive("/manage-accounts") ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
                 Manage Accounts
               </Link>

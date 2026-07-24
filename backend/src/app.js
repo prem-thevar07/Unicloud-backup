@@ -16,6 +16,7 @@ import activityRoutes from "./routes/activity.routes.js";
 import onedriveRoutes from "./routes/onedrive.routes.js";
 import s3Routes from "./routes/s3.routes.js";
 import boxRoutes from "./routes/box.routes.js";
+import transferRoutes from "./routes/transfer.routes.js";
 
 import "./config/googleAuth.js";
 
@@ -73,6 +74,7 @@ app.use("/api/activity", activityRoutes);
 app.use("/api/onedrive", onedriveRoutes);
 app.use("/api/s3", s3Routes);
 app.use("/api/box", boxRoutes);
+app.use("/api/transfer", transferRoutes);
 
 /* =======================
    HEALTH CHECK

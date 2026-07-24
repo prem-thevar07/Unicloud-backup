@@ -15,6 +15,7 @@ const ManageAccounts = lazy(() => import("./pages/ManageAccounts"));
 const Photos = lazy(() => import("./pages/Photos"));
 const Upload = lazy(() => import("./pages/Upload"));
 const Optimize = lazy(() => import("./pages/Optimize"));
+const Transfer = lazy(() => import("./pages/Transfer"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 
 function App() {
@@ -75,6 +76,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Optimize />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/transfer"
+          element={
+            <ProtectedRoute>
+              <Transfer />
             </ProtectedRoute>
           }
         />

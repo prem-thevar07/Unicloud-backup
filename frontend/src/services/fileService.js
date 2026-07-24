@@ -39,6 +39,69 @@ export const getFiles = async ({
   }
 };
 
+export const getAccounts = async () => {
+  try {
+    const res = await api.get("/accounts");
+    return res.data;
+  } catch (err) {
+    console.error("❌ getAccounts error:", err);
+    throw err;
+  }
+};
+
+export const getExplorerContents = async ({ accountId, folderId = "root", folderPath = "/" } = {}) => {
+  try {
+    const params = new URLSearchParams({ accountId });
+    if (folderId) params.append("folderId", folderId);
+    if (folderPath) params.append("folderPath", folderPath);
+    const res = await api.get(`/files/explorer-contents?${params.toString()}`);
+    return res.data;
+  } catch (err) {
+    console.error("❌ getExplorerContents error:", err);
+    throw err;
+  }
+};
+
+export const copyFile = async (transferData) => {
+  try {
+    const res = await api.post("/transfer/copy", transferData);
+    return res.data;
+  } catch (err) {
+    console.error("❌ copyFile error:", err);
+    throw err;
+  }
+};
+
+export const moveFile = async (transferData) => {
+  try {
+    const res = await api.post("/transfer/move", transferData);
+    return res.data;
+  } catch (err) {
+    console.error("❌ moveFile error:", err);
+    throw err;
+  }
+};
+
+export const batchTransferFiles = async (batchData) => {
+  try {
+    const res = await api.post("/transfer/batch", batchData);
+    return res.data;
+  } catch (err) {
+    console.error("❌ batchTransferFiles error:", err);
+    throw err;
+  }
+};
+
+export const getTransferHistory = async () => {
+  try {
+    const res = await api.get("/transfer/history");
+    return res.data;
+  } catch (err) {
+    console.error("❌ getTransferHistory error:", err);
+    throw err;
+  }
+};
+
 export const getActivity = async () => {
   try {
     const res = await api.get("/activity");

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getFiles } from "../services/fileService";
 import API from "../config/api";
 import MainLayout from "../layouts/MainLayout";
+import TransferModal from "../components/TransferModal";
 import "../styles/optimize.css";
 
 const providerIcons = {
@@ -23,6 +24,10 @@ const Optimize = () => {
   const [largeFiles, setLargeFiles] = useState([]);
   const [totalReclaimable, setTotalReclaimable] = useState(0);
   const [activeTab, setActiveTab] = useState("duplicates");
+
+  // Transfer Modal State
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [selectedTransferFile, setSelectedTransferFile] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
 
@@ -554,13 +559,24 @@ const Optimize = () => {
         setLargeFiles(matched);
       }
       
-      showToast("File deleted successfully!");
+      showToast(`Deleted "${file.name}"`);
     } catch (err) {
-      console.error("Delete file failed:", err);
-      showToast("Failed to delete file. Please try again.");
+      console.error("Delete file error:", err);
+      showToast(`Failed to delete "${file.name}"`);
     } finally {
       setDeletingId(null);
     }
+  };
+
+  // Transfer File Action
+  const handleOpenTransfer = (file) => {
+    setSelectedTransferFile(file);
+    setTransferModalOpen(true);
+  };
+
+  const handleTransferSuccess = (result) => {
+    showToast(`Successfully ${result.operation === "move" ? "moved" : "copied"} "${result.fileName}" to ${result.targetProvider}!`);
+    loadAndAnalyzeFiles(true);
   };
 
   // Pagination Math for Large Files
@@ -695,6 +711,13 @@ const Optimize = () => {
                           title="Download File"
                         >
                           📥 Download
+                        </button>
+                        <button
+                          className="btn-opt-action btn-opt-transfer"
+                          onClick={() => handleOpenTransfer(file)}
+                          title="Transfer / Move File Across Clouds"
+                        >
+                          🔄 Transfer
                         </button>
                         <button
                           className="btn-danger-sm"
@@ -984,6 +1007,13 @@ const Optimize = () => {
                           📥 Download
                         </button>
                         <button
+                          className="btn-opt-action btn-opt-transfer"
+                          onClick={() => handleOpenTransfer(file)}
+                          title="Transfer / Move File Across Clouds"
+                        >
+                          🔄 Transfer
+                        </button>
+                        <button
                           className="btn-danger-sm"
                           onClick={() => handleDeleteFile(file)}
                           disabled={deletingId === file.id}
@@ -1034,10 +1064,10 @@ const Optimize = () => {
                   </button>
                 ) : (
                   <button
-                    className="btn-pagination btn-no-more-pages"
+                    className="btn-pagination"
                     disabled={true}
                   >
-                    ✓ No More Pages
+                    No More Pages
                   </button>
                 )}
               </div>
@@ -1119,6 +1149,15 @@ const Optimize = () => {
             </section>
           </>
         )}
+
+        {/* CROSS-CLOUD TRANSFER MODAL */}
+        <TransferModal
+          isOpen={transferModalOpen}
+          onClose={() => setTransferModalOpen(false)}
+          file={selectedTransferFile}
+          connectedAccounts={connectedAccounts}
+          onSuccess={handleTransferSuccess}
+        />
       </main>
     </MainLayout>
   );

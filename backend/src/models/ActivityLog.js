@@ -18,6 +18,8 @@ const activityLogSchema = new mongoose.Schema(
         "file_uploaded",
         "file_deleted",
         "file_shared",
+        "file_copied",
+        "file_moved",
         "storage_warning",
         "storage_full",
       ],

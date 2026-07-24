@@ -53,7 +53,7 @@ export const fetchGoogleFiles = async (account, pageToken = null, options = {}) 
     const q = queryParts.join(" and ");
 
     const res = await drive.files.list({
-      pageSize: options.pageSize ? Number(options.pageSize) : 20, // 🔥 controlled
+      pageSize: options.pageSize ? Number(options.pageSize) : 100, // 🔥 controlled
       pageToken,
       orderBy: "createdTime desc",
       q, // Pass query parameter to Google Drive
@@ -117,17 +117,29 @@ export const fetchGoogleFolders = async (account) => {
       access_token: account.accessToken,
       refresh_token: account.refreshToken,
     });
+
+    try {
+      const tokenRes = await oauth2Client.getAccessToken();
+      if (tokenRes && tokenRes.token && tokenRes.token !== account.accessToken) {
+        account.accessToken = tokenRes.token;
+        const CloudAccountModule = await import("../../models/CloudAccount.js");
+        await CloudAccountModule.default.updateOne({ _id: account._id }, { accessToken: tokenRes.token });
+      }
+    } catch (tErr) {
+      console.warn("⚠️ Token refresh warning in fetchGoogleFolders:", tErr.message);
+    }
+
     const drive = google.drive({ version: "v3", auth: oauth2Client });
     const res = await drive.files.list({
       pageSize: 100,
-      q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false and 'me' in owners",
+      q: "'root' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
       fields: "files(id, name, createdTime)",
     });
     return (res.data.files || []).map(f => ({
       id: f.id,
       name: f.name,
       provider: "google",
-      accountId: account._id,
+      accountId: String(account._id),
       accountEmail: account.email
     }));
   } catch (err) {

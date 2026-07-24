@@ -25,7 +25,7 @@ export const fetchS3Files = async (account, pageToken, options = {}) => {
     const client = getS3Client(account);
     const bucket = getBucketName(account);
     
-    const { folderPath, search, pageSize = 50 } = options;
+    const { folderPath, search, pageSize = 100 } = options;
     
     // Construct command
     const params = {

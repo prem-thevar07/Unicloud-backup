@@ -80,7 +80,7 @@ export const fetchBoxFiles = async (account, pageToken = null, options = {}) => 
   try {
     const searchStr = options.search || "";
     const folderId = options.folderId || "0";
-    const pageSize = options.pageSize ? Number(options.pageSize) : 50;
+    const pageSize = options.pageSize ? Number(options.pageSize) : 100;
     const offset = pageToken ? Number(pageToken) : 0;
 
     let url = "";

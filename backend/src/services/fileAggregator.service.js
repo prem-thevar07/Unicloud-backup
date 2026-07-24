@@ -495,17 +495,23 @@ export const getExplorerContents = async (userId, accountId, folderId = "root", 
     }));
   } else if (provider === "s3") {
     const { S3Client, ListObjectsV2Command } = await import("@aws-sdk/client-s3");
+    const getCred = (key) => (account.credentials?.get ? account.credentials.get(key) : account.credentials?.[key]);
+    const accessKeyId = account.s3AccessKeyId || getCred("accessKeyId") || account.accessToken;
+    const secretAccessKey = account.s3SecretAccessKey || getCred("secretAccessKey") || account.refreshToken;
+    const region = account.s3Region || getCred("region") || "us-east-1";
+    const bucketName = account.s3BucketName || account.bucketName || getCred("bucketName") || getCred("s3BucketName") || getCred("bucket") || "";
+
     const client = new S3Client({
-      region: account.s3Region || "us-east-1",
+      region,
       credentials: {
-        accessKeyId: account.s3AccessKeyId,
-        secretAccessKey: account.s3SecretAccessKey,
+        accessKeyId,
+        secretAccessKey,
       },
     });
 
     const prefix = (!folderPath || folderPath === "/" || folderPath === "root") ? "" : folderPath.replace(/^\/+|\/+$/g, "") + "/";
     const command = new ListObjectsV2Command({
-      Bucket: account.s3BucketName,
+      Bucket: bucketName,
       Prefix: prefix,
       Delimiter: "/",
     });

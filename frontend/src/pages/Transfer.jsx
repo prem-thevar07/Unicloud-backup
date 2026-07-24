@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import MainLayout from "../layouts/MainLayout";
-import { getAccounts, getExplorerContents, batchTransferFiles, getTransferHistory } from "../services/fileService";
+import { getAccounts, getExplorerContents, batchTransferFiles, getTransferHistory, createFolder } from "../services/fileService";
 import "../styles/transfer.css";
 
 const providerNames = {
@@ -42,6 +42,11 @@ const Transfer = () => {
   const [targetSubfolders, setTargetSubfolders] = useState([]);
   const [loadingTarget, setLoadingTarget] = useState(false);
 
+  // New Folder Modal State
+  const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+
   // Batch Operation State
   const [isTransferring, setIsTransferring] = useState(false);
   const [transferProgressMsg, setTransferProgressMsg] = useState("");
@@ -64,12 +69,18 @@ const Transfer = () => {
       setAccounts(userAccounts);
 
       if (userAccounts.length >= 1) {
-        setSourceAccountId(String(userAccounts[0]._id));
+        const srcAcc = userAccounts[0];
+        setSourceAccountId(String(srcAcc._id));
+        setSourceBreadcrumbs([{ id: "root", name: getRootLabel(srcAcc.provider), path: "/" }]);
       }
       if (userAccounts.length >= 2) {
-        setTargetAccountId(String(userAccounts[1]._id));
+        const tgtAcc = userAccounts[1];
+        setTargetAccountId(String(tgtAcc._id));
+        setTargetBreadcrumbs([{ id: "root", name: getRootLabel(tgtAcc.provider), path: "/" }]);
       } else if (userAccounts.length === 1) {
-        setTargetAccountId(String(userAccounts[0]._id));
+        const tgtAcc = userAccounts[0];
+        setTargetAccountId(String(tgtAcc._id));
+        setTargetBreadcrumbs([{ id: "root", name: getRootLabel(tgtAcc.provider), path: "/" }]);
       }
     } catch (err) {
       console.error("Fetch accounts error:", err);
@@ -226,6 +237,14 @@ const Transfer = () => {
     setTargetBreadcrumbs((prev) => prev.slice(0, index + 1));
   };
 
+  const getRootLabel = (provider) => {
+    if (provider === "box") return "Box Root";
+    if (provider === "s3") return "Bucket Root";
+    if (provider === "dropbox") return "Dropbox Root";
+    if (provider === "onedrive") return "OneDrive Root";
+    return "My Drive";
+  };
+
   // Compute Target Path string for transfer
   const currentTargetFolderPath = useMemo(() => {
     if (targetBreadcrumbs.length <= 1) return "/";
@@ -235,13 +254,57 @@ const Transfer = () => {
   // Source Account Change
   const handleSourceAccountChange = (accId) => {
     setSourceAccountId(accId);
-    setSourceBreadcrumbs([{ id: "root", name: "My Drive", path: "/" }]);
+    const acc = accounts.find(a => String(a._id) === String(accId));
+    const label = acc ? getRootLabel(acc.provider) : "My Drive";
+    setSourceBreadcrumbs([{ id: "root", name: label, path: "/" }]);
   };
 
   // Target Account Change
   const handleTargetAccountChange = (accId) => {
     setTargetAccountId(accId);
-    setTargetBreadcrumbs([{ id: "root", name: "My Drive", path: "/" }]);
+    const acc = accounts.find(a => String(a._id) === String(accId));
+    const label = acc ? getRootLabel(acc.provider) : "My Drive";
+    setTargetBreadcrumbs([{ id: "root", name: label, path: "/" }]);
+  };
+
+  // Create Target Folder Handler
+  const handleCreateTargetFolder = async (e) => {
+    if (e) e.preventDefault();
+    if (!newFolderName.trim() || !targetAccountId) return;
+
+    setIsCreatingFolder(true);
+    const currentTargetFolder = targetBreadcrumbs[targetBreadcrumbs.length - 1];
+    const parentFolderId = currentTargetFolder ? currentTargetFolder.id : "root";
+
+    try {
+      const res = await createFolder({
+        accountId: targetAccountId,
+        folderName: newFolderName.trim(),
+        parentFolderId,
+        parentFolderPath: currentTargetFolderPath,
+      });
+
+      const folderName = newFolderName.trim();
+      showToast(`Created folder "${folderName}" in ${targetAccount?.provider || "target drive"}!`);
+      setNewFolderName("");
+      setShowNewFolderModal(false);
+
+      const created = res.folder;
+      if (created) {
+        handleOpenTargetSubfolder({
+          id: created.id,
+          name: created.name,
+          path: created.path || `/${created.name}`,
+        });
+      } else {
+        loadTargetExplorer(targetAccountId, parentFolderId, currentTargetFolderPath);
+      }
+    } catch (err) {
+      console.error("Create folder error:", err);
+      showToast(err.response?.data?.error || err.message || "Failed to create folder.");
+    } finally {
+      setIsCreatingFolder(false);
+    }
   };
 
   // Checkbox Selection
@@ -275,21 +338,34 @@ const Transfer = () => {
       `Streaming ${selectedFileIds.length} file(s) from ${sourceAccount?.provider} to ${targetAccount?.provider}...`
     );
 
+    const currentTargetFolder = targetBreadcrumbs[targetBreadcrumbs.length - 1];
+    const targetFolderIdToPass = currentTargetFolder ? currentTargetFolder.id : "root";
+
     try {
       const res = await batchTransferFiles({
         sourceAccountId,
         sourceFileIds: selectedFileIds,
         targetAccountId,
-        targetFolderId: currentTargetFolderPath,
+        targetFolderId: targetFolderIdToPass,
+        targetFolderPath: currentTargetFolderPath,
         operation,
       });
 
-      showToast(`Successfully ${operation === "move" ? "moved" : "copied"} ${res.transferredCount} file(s)!`);
+      if (res.transferredCount > 0) {
+        showToast(`Successfully ${operation === "move" ? "moved" : "copied"} ${res.transferredCount} file(s)!`);
+      } else if (res.failedCount > 0) {
+        const firstErr = res.errors?.[0]?.message || "Transfer failed due to an authentication error. Please reconnect the account.";
+        showToast(`Transfer Failed: ${firstErr}`);
+      } else {
+        showToast("No files were transferred.");
+      }
       setSelectedFileIds([]);
 
-      // Reload active folders & history
+      // Reload active source & target folder explorers & history
       const curSrc = sourceBreadcrumbs[sourceBreadcrumbs.length - 1];
+      const curTgt = targetBreadcrumbs[targetBreadcrumbs.length - 1];
       loadSourceExplorer(sourceAccountId, curSrc.id, curSrc.path);
+      loadTargetExplorer(targetAccountId, curTgt.id, curTgt.path);
       fetchHistory();
     } catch (err) {
       console.error("Batch transfer error:", err);
@@ -509,9 +585,35 @@ const Transfer = () => {
                 </div>
               ) : (
                 <>
-                  <div style={{ fontSize: "0.85rem", color: "#a5b4fc", fontWeight: "600" }}>
-                    Select Destination Subfolder (or stay in current folder):
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
+                    <span style={{ fontSize: "0.85rem", color: "#a5b4fc", fontWeight: "600" }}>
+                      Select Destination Subfolder (or stay in current folder):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewFolderModal(true)}
+                      title="Create a new folder inside current destination"
+                      style={{
+                        background: "linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(168, 85, 247, 0.3))",
+                        border: "1px solid rgba(168, 85, 247, 0.5)",
+                        color: "#f8fafc",
+                        padding: "5px 12px",
+                        borderRadius: "8px",
+                        fontSize: "0.82rem",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        boxShadow: "0 2px 10px rgba(99, 102, 241, 0.2)",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      <span>📁✨</span>
+                      <span>+ New Folder</span>
+                    </button>
                   </div>
+
                   {targetSubfolders.length === 0 ? (
                     <div style={{ padding: "1.5rem 1rem", color: "#94a3b8", fontSize: "0.88rem" }}>
                       ✓ Files will be transferred into "{currentTargetFolderPath}". No subfolders inside.
@@ -535,30 +637,125 @@ const Transfer = () => {
               )}
             </div>
 
-            {/* TARGET STORAGE QUOTA GAUGE */}
-            {targetAccount && (
-              <div className="quota-gauge-box">
-                <div className="quota-labels">
-                  <span>Available Storage ({targetAccount.provider})</span>
-                  <span>
-                    {formatSize(targetAccount.storageUsed)} / {targetAccount.storageTotal ? formatSize(targetAccount.storageTotal) : "Unlimited"}
-                  </span>
-                </div>
-                <div className="quota-bar-track">
-                  <div
-                    className="quota-bar-fill"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        targetAccount.storageTotal
-                          ? (targetAccount.storageUsed / targetAccount.storageTotal) * 100
-                          : 15
-                      )}%`,
-                    }}
-                  />
+            {/* CREATE NEW FOLDER INLINE MODAL OVERLAY */}
+            {showNewFolderModal && (
+              <div
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: "rgba(15, 23, 42, 0.75)",
+                  backdropFilter: "blur(6px)",
+                  zIndex: 9999,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "1rem",
+                }}
+              >
+                <div
+                  className="glass"
+                  style={{
+                    width: "100%",
+                    maxWidth: "420px",
+                    padding: "1.8rem",
+                    borderRadius: "16px",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    background: "rgba(30, 41, 59, 0.95)",
+                    boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5)",
+                  }}
+                >
+                  <h3 style={{ margin: "0 0 0.5rem 0", fontSize: "1.2rem", color: "#f8fafc" }}>
+                    📁 Create New Folder in {targetAccount ? (providerNames[targetAccount.provider] || targetAccount.provider) : "Target Drive"}
+                  </h3>
+                  <p style={{ margin: "0 0 1.2rem 0", fontSize: "0.85rem", color: "#94a3b8" }}>
+                    New folder will be created inside <strong style={{ color: "#a5b4fc" }}>{currentTargetFolderPath}</strong>
+                  </p>
+
+                  <form onSubmit={handleCreateTargetFolder}>
+                    <input
+                      type="text"
+                      className="account-selector-dropdown"
+                      placeholder="Folder name (e.g. Migration 2026)"
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      autoFocus
+                      required
+                      style={{ marginBottom: "1.2rem", width: "100%", boxSizing: "border-box" }}
+                    />
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewFolderModal(false);
+                          setNewFolderName("");
+                        }}
+                        disabled={isCreatingFolder}
+                        style={{
+                          background: "rgba(148, 163, 184, 0.2)",
+                          border: "1px solid rgba(148, 163, 184, 0.3)",
+                          color: "#cbd5e1",
+                          padding: "8px 16px",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          fontWeight: "500",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isCreatingFolder || !newFolderName.trim()}
+                        style={{
+                          background: "linear-gradient(135deg, #6366f1, #a855f7)",
+                          border: "none",
+                          color: "#fff",
+                          padding: "8px 20px",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          fontWeight: "600",
+                          boxShadow: "0 4px 14px rgba(99, 102, 241, 0.4)",
+                        }}
+                      >
+                        {isCreatingFolder ? "Creating..." : "Create Folder"}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
             )}
+
+            {/* TARGET STORAGE QUOTA GAUGE */}
+            {targetAccount && (() => {
+              const storageInfo = getAccountStorageInfo(targetAccount);
+              const freeBytes = storageInfo.total ? Math.max(0, storageInfo.total - storageInfo.used) : null;
+              return (
+                <div className="quota-gauge-box">
+                  <div className="quota-labels">
+                    <span>Storage Used ({providerNames[targetAccount.provider] || targetAccount.provider})</span>
+                    <span>
+                      {formatSize(storageInfo.used)} / {storageInfo.total ? formatSize(storageInfo.total) : "Unlimited"}
+                      {freeBytes !== null && (
+                        <span style={{ color: "#94a3b8", marginLeft: "6px", fontWeight: "normal" }}>
+                          ({formatSize(freeBytes)} free)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="quota-bar-track">
+                    <div
+                      className="quota-bar-fill"
+                      style={{
+                        width: `${storageInfo.percentage}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* SUMMARY SELECTION BOX */}
             <div className="summary-selection-box">
@@ -658,6 +855,14 @@ const Transfer = () => {
 export default Transfer;
 
 /* Helper Functions */
+function getAccountStorageInfo(account) {
+  if (!account) return { used: 0, total: null, percentage: 0 };
+  const used = account.storage?.used ?? account.storageUsed ?? account.usedStorage ?? 0;
+  const total = account.storage?.total ?? account.storageTotal ?? account.totalStorage ?? null;
+  const percentage = total && total > 0 ? Math.min(100, (used / total) * 100) : 15;
+  return { used, total, percentage };
+}
+
 function formatSize(bytes) {
   if (!bytes) return "0 B";
   const sizes = ["B", "KB", "MB", "GB", "TB"];

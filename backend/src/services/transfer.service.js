@@ -1,13 +1,71 @@
 import { google } from "googleapis";
 import axios from "axios";
+import { Readable } from "stream";
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import CloudAccount from "../models/CloudAccount.js";
 import { logActivity } from "../utils/activityLogger.js";
 
+import { refreshGoogleToken } from "./providers/google.provider.js";
+import { refreshBoxToken } from "./providers/box.provider.js";
+import { refreshDropboxToken } from "./providers/dropbox.provider.js";
+import { refreshOneDriveToken } from "./providers/onedrive.provider.js";
+
+const refreshAccountTokenIfPossible = async (account) => {
+  try {
+    if (account.provider === "google" && account.refreshToken) {
+      await refreshGoogleToken(account);
+    } else if (account.provider === "box" && account.refreshToken) {
+      await refreshBoxToken(account);
+    } else if (account.provider === "dropbox" && account.refreshToken) {
+      await refreshDropboxToken(account);
+    } else if (account.provider === "onedrive" && account.refreshToken) {
+      await refreshOneDriveToken(account);
+    }
+  } catch (err) {
+    console.error(`❌ Token refresh failed for ${account.provider}:`, err.message);
+  }
+};
+
+const getS3Details = (account) => {
+  const getCred = (key) => (account.credentials?.get ? account.credentials.get(key) : account.credentials?.[key]);
+  const accessKeyId = account.s3AccessKeyId || getCred("accessKeyId") || account.accessToken;
+  const secretAccessKey = account.s3SecretAccessKey || getCred("secretAccessKey") || account.refreshToken;
+  const region = account.s3Region || getCred("region") || "us-east-1";
+  const bucketName = account.s3BucketName || account.bucketName || getCred("bucketName") || getCred("s3BucketName") || getCred("bucket") || "";
+
+  const client = new S3Client({
+    region,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  });
+
+  return { client, bucketName };
+};
+
 /* ==========================================
-   1️⃣ GET FILE READABLE STREAM FROM SOURCE
+   1️⃣ READ FILE BUFFER FROM SOURCE PROVIDER
 ========================================== */
-export const getSourceFileStream = async (account, fileId) => {
+export const getSourceFileBuffer = async (account, fileId) => {
+  let attempts = 0;
+  while (attempts < 2) {
+    try {
+      return await getSourceFileBufferInternal(account, fileId);
+    } catch (err) {
+      const is401 = err.response?.status === 401 || err.status === 401;
+      if (is401 && attempts === 0 && account.refreshToken) {
+        console.warn(`⚠️ 401 reading source ${account.provider}, refreshing token...`);
+        await refreshAccountTokenIfPossible(account);
+        attempts++;
+      } else {
+        throw err;
+      }
+    }
+  }
+};
+
+const getSourceFileBufferInternal = async (account, fileId) => {
   const provider = account.provider;
 
   if (provider === "google") {
@@ -21,28 +79,25 @@ export const getSourceFileStream = async (account, fileId) => {
     });
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-    // Fetch file metadata to get name
     const metaRes = await drive.files.get({ fileId, fields: "id, name, mimeType, size" });
     const fileName = metaRes.data.name || "file";
     const mimeType = metaRes.data.mimeType || "application/octet-stream";
 
-    // Get readable stream
-    const streamRes = await drive.files.get(
+    const res = await drive.files.get(
       { fileId, alt: "media" },
-      { responseType: "stream" }
+      { responseType: "arraybuffer" }
     );
+    const buffer = Buffer.from(res.data);
 
-    return {
-      stream: streamRes.data,
-      fileName,
-      mimeType,
-      size: metaRes.data.size ? Number(metaRes.data.size) : null,
-    };
+    if (buffer.length === 0) {
+      throw new Error(`Source Google Drive file "${fileName}" returned 0 bytes.`);
+    }
+
+    return { buffer, fileName, mimeType, size: buffer.length };
   }
 
   if (provider === "dropbox") {
     const token = account.accessToken;
-    // Get temporary direct download link
     const linkRes = await axios.post(
       "https://api.dropboxapi.com/2/files/get_temporary_link",
       { path: fileId },
@@ -57,19 +112,23 @@ export const getSourceFileStream = async (account, fileId) => {
     const downloadUrl = linkRes.data.link;
     const fileName = linkRes.data.metadata.name || "file";
 
-    const streamRes = await axios.get(downloadUrl, { responseType: "stream" });
+    const res = await axios.get(downloadUrl, { responseType: "arraybuffer" });
+    const buffer = Buffer.from(res.data);
+
+    if (buffer.length === 0) {
+      throw new Error(`Source Dropbox file "${fileName}" returned 0 bytes.`);
+    }
 
     return {
-      stream: streamRes.data,
+      buffer,
       fileName,
       mimeType: "application/octet-stream",
-      size: linkRes.data.metadata.size || null,
+      size: buffer.length,
     };
   }
 
   if (provider === "onedrive") {
     const token = account.accessToken;
-    // Fetch file item details
     const itemRes = await axios.get(
       `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}`,
       {
@@ -80,49 +139,57 @@ export const getSourceFileStream = async (account, fileId) => {
     const fileName = itemRes.data.name || "file";
     const downloadUrl = itemRes.data["@microsoft.graph.downloadUrl"];
 
-    let streamRes;
+    let res;
     if (downloadUrl) {
-      streamRes = await axios.get(downloadUrl, { responseType: "stream" });
+      res = await axios.get(downloadUrl, { responseType: "arraybuffer" });
     } else {
-      streamRes = await axios.get(
+      res = await axios.get(
         `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`,
         {
           headers: { Authorization: `Bearer ${token}` },
-          responseType: "stream",
+          responseType: "arraybuffer",
         }
       );
     }
+    const buffer = Buffer.from(res.data);
+
+    if (buffer.length === 0) {
+      throw new Error(`Source OneDrive file "${fileName}" returned 0 bytes.`);
+    }
 
     return {
-      stream: streamRes.data,
+      buffer,
       fileName,
       mimeType: "application/octet-stream",
-      size: itemRes.data.size || null,
+      size: buffer.length,
     };
   }
 
   if (provider === "s3") {
-    const client = new S3Client({
-      region: account.s3Region || "us-east-1",
-      credentials: {
-        accessKeyId: account.s3AccessKeyId,
-        secretAccessKey: account.s3SecretAccessKey,
-      },
-    });
+    const { client, bucketName } = getS3Details(account);
 
     const command = new GetObjectCommand({
-      Bucket: account.s3BucketName,
+      Bucket: bucketName,
       Key: fileId,
     });
 
     const s3Res = await client.send(command);
     const fileName = fileId.split("/").pop() || "file";
+    const chunks = [];
+    for await (const chunk of s3Res.Body) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+
+    if (buffer.length === 0) {
+      throw new Error(`Source S3 object "${fileName}" returned 0 bytes.`);
+    }
 
     return {
-      stream: s3Res.Body,
+      buffer,
       fileName,
       mimeType: s3Res.ContentType || "application/octet-stream",
-      size: s3Res.ContentLength || null,
+      size: buffer.length,
     };
   }
 
@@ -137,19 +204,24 @@ export const getSourceFileStream = async (account, fileId) => {
 
     const fileName = metaRes.data.name || "file";
 
-    const streamRes = await axios.get(
+    const res = await axios.get(
       `https://api.box.com/2.0/files/${fileId}/content`,
       {
         headers: { Authorization: `Bearer ${token}` },
-        responseType: "stream",
+        responseType: "arraybuffer",
       }
     );
+    const buffer = Buffer.from(res.data);
+
+    if (buffer.length === 0) {
+      throw new Error(`Source Box file "${fileName}" returned 0 bytes.`);
+    }
 
     return {
-      stream: streamRes.data,
+      buffer,
       fileName,
       mimeType: "application/octet-stream",
-      size: metaRes.data.size || null,
+      size: buffer.length,
     };
   }
 
@@ -157,10 +229,32 @@ export const getSourceFileStream = async (account, fileId) => {
 };
 
 /* ==========================================
-   2️⃣ UPLOAD STREAM TO TARGET PROVIDER
+   2️⃣ UPLOAD FILE BUFFER TO TARGET PROVIDER
 ========================================== */
-export const uploadFileStreamToTarget = async (account, fileName, fileStream, targetFolderId) => {
+export const uploadFileBufferToTarget = async (account, fileName, buffer, targetFolderId, targetFolderPath = null) => {
+  let attempts = 0;
+  while (attempts < 2) {
+    try {
+      return await uploadFileBufferToTargetInternal(account, fileName, buffer, targetFolderId, targetFolderPath);
+    } catch (err) {
+      const is401 = err.response?.status === 401 || err.status === 401;
+      if (is401 && attempts === 0 && account.refreshToken) {
+        console.warn(`⚠️ 401 uploading to target ${account.provider}, refreshing token...`);
+        await refreshAccountTokenIfPossible(account);
+        attempts++;
+      } else {
+        throw err;
+      }
+    }
+  }
+};
+
+const uploadFileBufferToTargetInternal = async (account, fileName, buffer, targetFolderId, targetFolderPath = null) => {
   const provider = account.provider;
+
+  if (!buffer || buffer.length === 0) {
+    throw new Error("Cannot upload empty 0-byte buffer to target drive.");
+  }
 
   if (provider === "google") {
     const oauth2Client = new google.auth.OAuth2(
@@ -174,13 +268,14 @@ export const uploadFileStreamToTarget = async (account, fileName, fileStream, ta
     const drive = google.drive({ version: "v3", auth: oauth2Client });
 
     const requestBody = { name: fileName };
-    if (targetFolderId && targetFolderId !== "root" && targetFolderId !== "/") {
+    if (targetFolderId && targetFolderId !== "root" && targetFolderId !== "/" && !targetFolderId.startsWith("/")) {
       requestBody.parents = [targetFolderId];
     }
 
+    const stream = Readable.from(buffer);
     const createRes = await drive.files.create({
       requestBody,
-      media: { body: fileStream },
+      media: { body: stream },
       fields: "id, name, mimeType, size",
     });
 
@@ -189,16 +284,13 @@ export const uploadFileStreamToTarget = async (account, fileName, fileStream, ta
 
   if (provider === "dropbox") {
     const token = account.accessToken;
-
-    const chunks = [];
-    for await (const chunk of fileStream) {
-      chunks.push(chunk);
+    let cleanFolder = "";
+    if (targetFolderPath && targetFolderPath !== "/" && targetFolderPath !== "root") {
+      cleanFolder = targetFolderPath.startsWith("/") ? targetFolderPath : `/${targetFolderPath}`;
+    } else if (targetFolderId && targetFolderId !== "/" && targetFolderId !== "root" && !targetFolderId.startsWith("id:")) {
+      cleanFolder = targetFolderId.startsWith("/") ? targetFolderId : `/${targetFolderId}`;
     }
-    const buffer = Buffer.concat(chunks);
 
-    const cleanFolder = targetFolderId && targetFolderId !== "/" && targetFolderId !== "root"
-      ? targetFolderId.startsWith("/") ? targetFolderId : `/${targetFolderId}`
-      : "";
     const dropboxPath = `${cleanFolder}/${fileName}`.replace(/\/+/g, "/");
 
     const uploadRes = await axios.post(
@@ -223,13 +315,7 @@ export const uploadFileStreamToTarget = async (account, fileName, fileStream, ta
 
   if (provider === "onedrive") {
     const token = account.accessToken;
-    const chunks = [];
-    for await (const chunk of fileStream) {
-      chunks.push(chunk);
-    }
-    const buffer = Buffer.concat(chunks);
-
-    const folderPath = targetFolderId && targetFolderId !== "root" && targetFolderId !== "/"
+    const folderPath = targetFolderId && targetFolderId !== "root" && targetFolderId !== "/" && !targetFolderId.startsWith("/")
       ? `/items/${targetFolderId}:`
       : "/root:";
 
@@ -246,27 +332,18 @@ export const uploadFileStreamToTarget = async (account, fileName, fileStream, ta
   }
 
   if (provider === "s3") {
-    const client = new S3Client({
-      region: account.s3Region || "us-east-1",
-      credentials: {
-        accessKeyId: account.s3AccessKeyId,
-        secretAccessKey: account.s3SecretAccessKey,
-      },
-    });
+    const { client, bucketName } = getS3Details(account);
 
-    const chunks = [];
-    for await (const chunk of fileStream) {
-      chunks.push(chunk);
+    let cleanFolder = "";
+    if (targetFolderPath && targetFolderPath !== "/" && targetFolderPath !== "root") {
+      cleanFolder = targetFolderPath.replace(/^\/+|\/+$/g, "") + "/";
+    } else if (targetFolderId && targetFolderId !== "root" && targetFolderId !== "/") {
+      cleanFolder = targetFolderId.replace(/^\/+|\/+$/g, "") + "/";
     }
-    const buffer = Buffer.concat(chunks);
-
-    const cleanFolder = targetFolderId && targetFolderId !== "root" && targetFolderId !== "/"
-      ? targetFolderId.replace(/^\/+|\/+$/g, "") + "/"
-      : "";
     const s3Key = `${cleanFolder}${fileName}`;
 
     const command = new PutObjectCommand({
-      Bucket: account.s3BucketName,
+      Bucket: bucketName,
       Key: s3Key,
       Body: buffer,
     });
@@ -277,15 +354,10 @@ export const uploadFileStreamToTarget = async (account, fileName, fileStream, ta
 
   if (provider === "box") {
     const token = account.accessToken;
-    const chunks = [];
-    for await (const chunk of fileStream) {
-      chunks.push(chunk);
+    let folderId = "0";
+    if (targetFolderId && targetFolderId !== "root" && targetFolderId !== "/" && !targetFolderId.startsWith("/")) {
+      folderId = targetFolderId;
     }
-    const buffer = Buffer.concat(chunks);
-
-    const folderId = targetFolderId && targetFolderId !== "root" && targetFolderId !== "/"
-      ? targetFolderId
-      : "0";
 
     const FormDataModule = (await import("form-data")).default;
     const form = new FormDataModule();
@@ -349,16 +421,10 @@ export const deleteSourceFile = async (account, fileId) => {
   }
 
   if (provider === "s3") {
-    const client = new S3Client({
-      region: account.s3Region || "us-east-1",
-      credentials: {
-        accessKeyId: account.s3AccessKeyId,
-        secretAccessKey: account.s3SecretAccessKey,
-      },
-    });
+    const { client, bucketName } = getS3Details(account);
 
     const command = new DeleteObjectCommand({
-      Bucket: account.s3BucketName,
+      Bucket: bucketName,
       Key: fileId,
     });
 
@@ -386,6 +452,7 @@ export const executeTransfer = async ({
   sourceFileId,
   targetAccountId,
   targetFolderId = "root",
+  targetFolderPath = null,
   operation = "copy", // "copy" | "move"
 }) => {
   const sourceAccount = await CloudAccount.findOne({ _id: sourceAccountId, userId });
@@ -400,16 +467,21 @@ export const executeTransfer = async ({
 
   console.log(`🚀 Starting ${operation.toUpperCase()} transfer from ${sourceAccount.provider} (${sourceAccount.email}) to ${targetAccount.provider} (${targetAccount.email})...`);
 
-  // Step 1: Read stream from source
-  const sourceData = await getSourceFileStream(sourceAccount, sourceFileId);
+  // Step 1: Read full binary buffer from source
+  const sourceData = await getSourceFileBuffer(sourceAccount, sourceFileId);
 
-  // Step 2: Write stream to target
-  const uploadResult = await uploadFileStreamToTarget(
+  console.log(`📥 Read ${sourceData.buffer.length} bytes for "${sourceData.fileName}" from ${sourceAccount.provider}. Uploading to ${targetAccount.provider}...`);
+
+  // Step 2: Write buffer to target
+  const uploadResult = await uploadFileBufferToTarget(
     targetAccount,
     sourceData.fileName,
-    sourceData.stream,
-    targetFolderId
+    sourceData.buffer,
+    targetFolderId,
+    targetFolderPath
   );
+
+  console.log(`✅ Successfully uploaded ${sourceData.buffer.length} bytes to ${targetAccount.provider}!`);
 
   // Step 3: If Move, delete original source file
   if (operation === "move") {
@@ -426,13 +498,14 @@ export const executeTransfer = async ({
   await logActivity(
     userId,
     actionText,
-    `${operation === "move" ? "Moved" : "Copied"} "${sourceData.fileName}" from ${sourceAccount.provider} (${sourceAccount.email}) to ${targetAccount.provider} (${targetAccount.email})`
+    `${operation === "move" ? "Moved" : "Copied"} "${sourceData.fileName}" (${(sourceData.buffer.length / 1024).toFixed(1)} KB) from ${sourceAccount.provider} (${sourceAccount.email}) to ${targetAccount.provider} (${targetAccount.email})`
   );
 
   return {
     success: true,
     operation,
     fileName: sourceData.fileName,
+    bytesTransferred: sourceData.buffer.length,
     sourceProvider: sourceAccount.provider,
     targetProvider: targetAccount.provider,
     targetFile: uploadResult,

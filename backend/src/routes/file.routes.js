@@ -3,7 +3,28 @@ import authMiddleware from "../middleware/auth.middleware.js";
 import { getAllFiles, getAllFolders, getExplorerContents, deleteFile } from "../services/fileAggregator.service.js";
 import { logActivity } from "../utils/activityLogger.js";
 
+import { createRemoteFolder } from "../services/folder.service.js";
+
 const router = express.Router();
+
+router.post("/create-folder", authMiddleware, async (req, res) => {
+  try {
+    const { accountId, folderName, parentFolderId, parentFolderPath } = req.body;
+    if (!accountId || !folderName) {
+      return res.status(400).json({ error: "accountId and folderName are required." });
+    }
+    const folder = await createRemoteFolder(req.user.id, {
+      accountId,
+      folderName,
+      parentFolderId,
+      parentFolderPath,
+    });
+    res.json({ success: true, folder });
+  } catch (err) {
+    console.error("❌ Create folder error:", err.message);
+    res.status(500).json({ error: err.message || "Failed to create folder." });
+  }
+});
 
 router.get("/explorer-contents", authMiddleware, async (req, res) => {
   try {

@@ -111,3 +111,18 @@ export const getActivity = async () => {
     return [];
   }
 };
+
+export const createFolder = async ({ accountId, folderName, parentFolderId, parentFolderPath }) => {
+  try {
+    const res = await api.post("/files/create-folder", {
+      accountId,
+      folderName,
+      parentFolderId,
+      parentFolderPath,
+    });
+    return res.data;
+  } catch (err) {
+    console.error("❌ createFolder error:", err);
+    throw err;
+  }
+};

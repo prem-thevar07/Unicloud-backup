@@ -148,6 +148,34 @@ export const fetchGoogleFolders = async (account) => {
   }
 };
 
+export const refreshGoogleToken = async (account) => {
+  try {
+    if (!account.refreshToken) return account.accessToken;
+    console.log(`🔄 Refreshing Google token for: ${account.email}`);
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({
+      refresh_token: account.refreshToken,
+    });
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    if (credentials.access_token) {
+      account.accessToken = credentials.access_token;
+      if (credentials.refresh_token) {
+        account.refreshToken = credentials.refresh_token;
+      }
+      account.lastSyncedAt = new Date();
+      await account.save();
+      console.log("✅ Google token refreshed successfully.");
+    }
+    return account.accessToken;
+  } catch (err) {
+    console.error("❌ Failed to refresh Google token:", err.response?.data || err.message);
+    throw err;
+  }
+};
+
 export const deleteGoogleFile = async (account, fileId) => {
   try {
     const oauth2Client = new google.auth.OAuth2(

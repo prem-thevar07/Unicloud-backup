@@ -3,7 +3,7 @@ import CloudAccount from "../../models/CloudAccount.js";
 import { fileCache } from "../../utils/cache.js";
 
 // Helper to refresh Dropbox access token
-const refreshDropboxToken = async (account) => {
+export const refreshDropboxToken = async (account) => {
   try {
     console.log(`🔄 Refreshing Dropbox token for: ${account.email}`);
     

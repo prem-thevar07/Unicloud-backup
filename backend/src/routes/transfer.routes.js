@@ -67,7 +67,7 @@ router.post("/move", auth, async (req, res) => {
 router.post("/batch", auth, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { sourceAccountId, sourceFileIds, targetAccountId, targetFolderId, operation = "copy" } = req.body;
+    const { sourceAccountId, sourceFileIds, targetAccountId, targetFolderId, targetFolderPath, operation = "copy" } = req.body;
 
     if (!sourceAccountId || !Array.isArray(sourceFileIds) || sourceFileIds.length === 0 || !targetAccountId) {
       return res.status(400).json({ message: "sourceAccountId, sourceFileIds (array), and targetAccountId are required." });
@@ -84,6 +84,7 @@ router.post("/batch", auth, async (req, res) => {
           sourceFileId: fileId,
           targetAccountId,
           targetFolderId,
+          targetFolderPath,
           operation,
         });
         results.push(itemResult);
